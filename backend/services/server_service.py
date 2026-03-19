@@ -72,8 +72,56 @@ def _check_port_in_use(port: int) -> dict[str, Any] | None:
     return None
 
 
+def _parse_ports(project_path: Path) -> dict[str, int | None]:
+    """Parse backend and frontend ports from .run_ports or run.sh."""
+    ports: dict[str, int | None] = {"backend": None, "frontend": None}
+
+    # Try .run_ports first
+    run_ports = project_path / ".run_ports"
+    if run_ports.exists():
+        try:
+            content = run_ports.read_text()
+            for line in content.splitlines():
+                if "BACKEND_PORT" in line:
+                    match = re.search(r"(\d+)", line)
+                    if match:
+                        ports["backend"] = int(match.group(1))
+                if "FRONTEND_PORT" in line:
+                    match = re.search(r"(\d+)", line)
+                    if match:
+                        ports["frontend"] = int(match.group(1))
+        except OSError:
+            pass
+
+    # Fallback: parse run.sh defaults
+    if not ports["backend"]:
+        run_sh = project_path / "run.sh"
+        if run_sh.exists():
+            try:
+                content = run_sh.read_text()
+                for line in content.splitlines():
+                    if "DEFAULT_BACKEND_PORT" in line and not ports["backend"]:
+                        match = re.search(r"(\d+)", line)
+                        if match:
+                            ports["backend"] = int(match.group(1))
+                    if "DEFAULT_FRONTEND_PORT" in line and not ports["frontend"]:
+                        match = re.search(r"(\d+)", line)
+                        if match:
+                            ports["frontend"] = int(match.group(1))
+            except OSError:
+                pass
+
+    # Fallback: use metadata port as backend
+    if not ports["backend"]:
+        ports["backend"] = _parse_port_from_metadata(project_path)
+
+    return ports
+
+
 def get_server_status() -> list[dict[str, Any]]:
     """Scan all projects for running servers based on known ports."""
+    from services.scanner_service import _parse_idea_note
+
     statuses: list[dict[str, Any]] = []
 
     for stage in STAGE_PREFIXES:
@@ -87,20 +135,55 @@ def get_server_status() -> list[dict[str, Any]]:
             if project_dir.name.startswith("_"):
                 continue
 
-            port = _parse_port_from_metadata(project_dir)
-            if port is None:
+            run_sh = project_dir / "run.sh"
+            if not run_sh.exists():
                 continue
 
-            port_info = _check_port_in_use(port)
-            has_run_sh = (project_dir / "run.sh").exists()
+            ports = _parse_ports(project_dir)
+            if not ports["backend"] and not ports["frontend"]:
+                continue
+
+            # Check port status
+            backend_alive = False
+            frontend_alive = False
+            backend_pid: str | None = None
+            frontend_pid: str | None = None
+
+            if ports["backend"]:
+                info = _check_port_in_use(ports["backend"])
+                if info and info.get("in_use"):
+                    backend_alive = True
+                    backend_pid = info["pids"][0] if info["pids"] else None
+
+            if ports["frontend"]:
+                info = _check_port_in_use(ports["frontend"])
+                if info and info.get("in_use"):
+                    frontend_alive = True
+                    frontend_pid = info["pids"][0] if info["pids"] else None
+
+            # Get metadata
+            idea_note = project_dir / "docs" / "_아이디어노트.md"
+            meta = _parse_idea_note(idea_note) if idea_note.exists() else {}
 
             statuses.append({
                 "project_name": project_dir.name,
+                "label": meta.get("label", project_dir.name),
+                "description": meta.get("description", ""),
+                "path": str(project_dir),
                 "stage": stage,
-                "port": port,
-                "running": port_info is not None and port_info.get("in_use", False),
-                "pids": port_info["pids"] if port_info else [],
-                "has_run_sh": has_run_sh,
+                "backend_port": ports["backend"],
+                "frontend_port": ports["frontend"],
+                "backend_alive": backend_alive,
+                "frontend_alive": frontend_alive,
+                "backend_pid": backend_pid,
+                "frontend_pid": frontend_pid,
+                "has_run_sh": True,
+                # Legacy fields for compatibility
+                "port": ports["backend"] or ports["frontend"],
+                "status": "running" if (backend_alive or frontend_alive) else "stopped",
+                "pid": backend_pid or frontend_pid,
+                "running": backend_alive or frontend_alive,
+                "pids": [],
             })
 
     return statuses

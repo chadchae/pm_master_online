@@ -758,6 +758,41 @@ async def restart_server(project_name: str):
     return result
 
 
+@app.post("/api/servers/start-all")
+async def start_all_servers():
+    """Start all stopped servers."""
+    results = []
+    statuses = server_service.get_server_status()
+    for s in statuses:
+        if not s.get("running"):
+            r = await server_service.run_server_command(s["project_name"], "start")
+            results.append({"project": s["project_name"], **r})
+    return {"results": results}
+
+
+@app.post("/api/servers/stop-all")
+async def stop_all_servers():
+    """Stop all running servers."""
+    results = []
+    statuses = server_service.get_server_status()
+    for s in statuses:
+        if s.get("running"):
+            r = await server_service.run_server_command(s["project_name"], "stop")
+            results.append({"project": s["project_name"], **r})
+    return {"results": results}
+
+
+@app.post("/api/servers/restart-all")
+async def restart_all_servers():
+    """Restart all servers."""
+    results = []
+    statuses = server_service.get_server_status()
+    for s in statuses:
+        r = await server_service.run_server_command(s["project_name"], "restart")
+        results.append({"project": s["project_name"], **r})
+    return {"results": results}
+
+
 # --- Todo endpoints ---
 
 class TodoCreateRequest(BaseModel):

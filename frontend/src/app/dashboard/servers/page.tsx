@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { apiFetch, ServerStatus } from "@/lib/api";
 import {
   Loader2,
@@ -9,7 +9,8 @@ import {
   RotateCw,
   Circle,
   RefreshCw,
-  FileText,
+  Terminal,
+  ExternalLink,
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -20,9 +21,11 @@ export default function ServersPage() {
   const [servers, setServers] = useState<ServerStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [bulkLoading, setBulkLoading] = useState<string | null>(null);
   const [logProject, setLogProject] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logLoading, setLogLoading] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   const loadServers = useCallback(async () => {
     try {
@@ -49,12 +52,29 @@ export default function ServersPage() {
         { method: "POST" }
       );
       toast.success(data.message || `${action} successful`);
-      // Reload server status after action
       setTimeout(loadServers, 1000);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Failed to ${action}`);
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleBulkAction = async (action: "start-all" | "stop-all" | "restart-all") => {
+    setBulkLoading(action);
+    try {
+      const data = await apiFetch<{ results: Array<{ project: string; success: boolean }> }>(
+        `/api/servers/${action}`,
+        { method: "POST" }
+      );
+      const succeeded = data.results?.filter((r) => r.success).length ?? 0;
+      const total = data.results?.length ?? 0;
+      toast.success(`${action.replace("-all", "")}: ${succeeded}/${total} servers`);
+      setTimeout(loadServers, 1500);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Failed to ${action}`);
+    } finally {
+      setBulkLoading(null);
     }
   };
 
@@ -74,10 +94,22 @@ export default function ServersPage() {
   }, []);
 
   // Open log viewer
-  const openLogs = useCallback((projectName: string) => {
-    setLogProject(projectName);
-    fetchLogs(projectName);
-  }, [fetchLogs]);
+  const openLogs = useCallback(
+    (projectName: string) => {
+      if (logProject === projectName) {
+        setLogProject(null);
+        return;
+      }
+      setLogProject(projectName);
+      fetchLogs(projectName);
+    },
+    [fetchLogs, logProject]
+  );
+
+  // Auto-scroll logs
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logLines]);
 
   // Auto-refresh logs every 5 seconds when panel is open
   useEffect(() => {
@@ -86,31 +118,25 @@ export default function ServersPage() {
     return () => clearInterval(interval);
   }, [logProject, fetchLogs]);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "running":
-        return (
-          <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
-            <Circle className="w-2.5 h-2.5 fill-current" />
-            <span className="text-sm">{t("servers.running")}</span>
-          </span>
-        );
-      case "stopped":
-        return (
-          <span className="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
-            <Circle className="w-2.5 h-2.5" />
-            <span className="text-sm">{t("servers.stopped")}</span>
-          </span>
-        );
-      default:
-        return (
-          <span className="flex items-center gap-1.5 text-amber-500">
-            <Circle className="w-2.5 h-2.5 fill-current" />
-            <span className="text-sm">{status}</span>
-          </span>
-        );
+  const getBorderColor = (server: ServerStatus): string => {
+    if (server.backend_alive || server.frontend_alive) {
+      return "border-l-green-500";
+    }
+    if (!server.backend_port && !server.frontend_port) {
+      return "border-l-neutral-300 dark:border-l-neutral-700";
+    }
+    return "border-l-red-400";
+  };
+
+  const openInBrowser = (server: ServerStatus) => {
+    const port = server.frontend_port || server.backend_port;
+    if (port) {
+      window.open(`http://localhost:${port}`, "_blank");
     }
   };
+
+  const runningCount = servers.filter((s) => s.backend_alive || s.frontend_alive).length;
+  const stoppedCount = servers.length - runningCount;
 
   if (loading) {
     return (
@@ -122,162 +148,243 @@ export default function ServersPage() {
 
   return (
     <div className="space-y-4">
+      {/* Top Action Bar */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          {t("servers.autoRefresh")}
-        </p>
-        <button
-          onClick={loadServers}
-          className="flex items-center gap-1.5 text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
-        >
-          <RefreshCw className="w-4 h-4" />
-          {t("action.refresh")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleBulkAction("start-all")}
+            disabled={bulkLoading !== null || stoppedCount === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950 border border-green-200 dark:border-green-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {bulkLoading === "start-all" ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Play className="w-3.5 h-3.5" />
+            )}
+            Start All
+          </button>
+          <button
+            onClick={() => handleBulkAction("restart-all")}
+            disabled={bulkLoading !== null || servers.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950 border border-amber-200 dark:border-amber-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {bulkLoading === "restart-all" ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RotateCw className="w-3.5 h-3.5" />
+            )}
+            Restart All
+          </button>
+          <button
+            onClick={() => handleBulkAction("stop-all")}
+            disabled={bulkLoading !== null || runningCount === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950 border border-red-200 dark:border-red-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {bulkLoading === "stop-all" ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Square className="w-3.5 h-3.5" />
+            )}
+            Stop All
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-neutral-400">
+            {runningCount} running / {stoppedCount} stopped
+          </span>
+          <button
+            onClick={loadServers}
+            className="flex items-center gap-1.5 text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            {t("action.refresh")}
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-neutral-100 dark:border-neutral-800">
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                {t("servers.project")}
-              </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                {t("servers.port")}
-              </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                {t("servers.status")}
-              </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                PID
-              </th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                {t("servers.actions")}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-            {servers.map((server) => (
-              <tr key={server.project_name} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
-                <td className="px-4 py-3">
-                  <span className="text-sm font-medium text-neutral-900 dark:text-white">
-                    {server.project_name}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400 font-mono">
-                    {server.port || "-"}
-                  </span>
-                </td>
-                <td className="px-4 py-3">{getStatusBadge(server.status)}</td>
-                <td className="px-4 py-3">
-                  <span className="text-sm text-neutral-500 dark:text-neutral-400 font-mono">
-                    {server.pid || "-"}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    {server.status !== "running" && (
-                      <button
-                        onClick={() => handleAction(server.project_name, "start")}
-                        disabled={actionLoading !== null}
-                        className="p-1.5 rounded-md hover:bg-green-50 dark:hover:bg-green-950 text-green-600 dark:text-green-400 transition-colors disabled:opacity-50"
-                        title="Start"
-                      >
-                        {actionLoading === `${server.project_name}-start` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Play className="w-4 h-4" />
-                        )}
-                      </button>
-                    )}
-                    {server.status === "running" && (
-                      <button
-                        onClick={() => handleAction(server.project_name, "stop")}
-                        disabled={actionLoading !== null}
-                        className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
-                        title="Stop"
-                      >
-                        {actionLoading === `${server.project_name}-stop` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Square className="w-4 h-4" />
-                        )}
-                      </button>
-                    )}
+      {/* Server Cards */}
+      <div className="space-y-2">
+        {servers.map((server) => (
+          <div key={server.project_name}>
+            <div
+              className={`bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 border-l-4 ${getBorderColor(server)} overflow-hidden`}
+            >
+              <div className="flex items-center px-4 py-3">
+                {/* Left: Project info */}
+                <div className="flex-1 min-w-0 mr-4">
+                  <h3 className="text-sm font-semibold text-neutral-900 dark:text-white truncate">
+                    {server.label || server.project_name}
+                  </h3>
+                  {server.description && (
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5">
+                      {server.description}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono truncate mt-0.5">
+                    {server.path}
+                  </p>
+                </div>
+
+                {/* Middle: Ports */}
+                <div className="flex items-center gap-4 mr-6 shrink-0">
+                  {server.backend_port && (
+                    <div className="flex items-center gap-1.5">
+                      <Circle
+                        className={`w-2 h-2 ${
+                          server.backend_alive
+                            ? "fill-green-500 text-green-500"
+                            : "fill-red-400 text-red-400"
+                        }`}
+                      />
+                      <span className="text-xs font-mono text-neutral-600 dark:text-neutral-400">
+                        BE:{server.backend_port}
+                      </span>
+                    </div>
+                  )}
+                  {server.frontend_port && (
+                    <div className="flex items-center gap-1.5">
+                      <Circle
+                        className={`w-2 h-2 ${
+                          server.frontend_alive
+                            ? "fill-green-500 text-green-500"
+                            : "fill-red-400 text-red-400"
+                        }`}
+                      />
+                      <span className="text-xs font-mono text-neutral-600 dark:text-neutral-400">
+                        FE:{server.frontend_port}
+                      </span>
+                    </div>
+                  )}
+                  {!server.backend_port && !server.frontend_port && server.port && (
+                    <div className="flex items-center gap-1.5">
+                      <Circle
+                        className={`w-2 h-2 ${
+                          server.status === "running"
+                            ? "fill-green-500 text-green-500"
+                            : "fill-red-400 text-red-400"
+                        }`}
+                      />
+                      <span className="text-xs font-mono text-neutral-600 dark:text-neutral-400">
+                        {server.port}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  {server.status !== "running" && (
                     <button
-                      onClick={() => handleAction(server.project_name, "restart")}
+                      onClick={() => handleAction(server.project_name, "start")}
                       disabled={actionLoading !== null}
-                      className="p-1.5 rounded-md hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-600 dark:text-amber-400 transition-colors disabled:opacity-50"
-                      title="Restart"
+                      className="p-1.5 rounded-md hover:bg-green-50 dark:hover:bg-green-950 text-green-600 dark:text-green-400 transition-colors disabled:opacity-50"
+                      title="Start"
                     >
-                      {actionLoading === `${server.project_name}-restart` ? (
+                      {actionLoading === `${server.project_name}-start` ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        <RotateCw className="w-4 h-4" />
+                        <Play className="w-4 h-4" />
                       )}
                     </button>
+                  )}
+                  {server.status === "running" && (
                     <button
-                      onClick={() => openLogs(server.project_name)}
-                      className="p-1.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-600 dark:text-indigo-400 transition-colors"
-                      title={t("server.viewLogs")}
+                      onClick={() => handleAction(server.project_name, "stop")}
+                      disabled={actionLoading !== null}
+                      className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
+                      title="Stop"
                     >
-                      <FileText className="w-4 h-4" />
+                      {actionLoading === `${server.project_name}-stop` ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleAction(server.project_name, "restart")}
+                    disabled={actionLoading !== null}
+                    className="p-1.5 rounded-md hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-600 dark:text-amber-400 transition-colors disabled:opacity-50"
+                    title="Restart"
+                  >
+                    {actionLoading === `${server.project_name}-restart` ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RotateCw className="w-4 h-4" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => openLogs(server.project_name)}
+                    className={`p-1.5 rounded-md transition-colors ${
+                      logProject === server.project_name
+                        ? "bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300"
+                        : "hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-600 dark:text-indigo-400"
+                    }`}
+                    title="Live Log"
+                  >
+                    <Terminal className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => openInBrowser(server)}
+                    disabled={!server.frontend_alive && !server.backend_alive}
+                    className="p-1.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-600 dark:text-blue-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Open in Browser"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Inline Log Panel */}
+            {logProject === server.project_name && (
+              <div className="mt-1 bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
+                  <h4 className="text-xs font-medium text-neutral-400 flex items-center gap-1.5">
+                    <Terminal className="w-3.5 h-3.5" />
+                    Logs -- {server.project_name}
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-600">
+                      Auto-refresh 5s | {logLines.length} lines
+                    </span>
+                    <button
+                      onClick={() => setLogProject(null)}
+                      className="p-0.5 rounded hover:bg-neutral-800 text-neutral-500 hover:text-neutral-300 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                </td>
-              </tr>
-            ))}
-            {servers.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-neutral-400">
-                  {t("servers.noServers")}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      {/* Log viewer modal */}
-      {logProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-neutral-900 rounded-xl border border-neutral-700 w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-700">
-              <h3 className="text-sm font-medium text-neutral-200 flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                {t("server.logs")} — {logProject}
-              </h3>
-              <button
-                onClick={() => setLogProject(null)}
-                className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {/* Log content */}
-            <div className="flex-1 overflow-auto p-4">
-              {logLoading && logLines.length === 0 ? (
-                <div className="flex items-center justify-center h-32">
-                  <Loader2 className="w-5 h-5 animate-spin text-neutral-500" />
                 </div>
-              ) : logLines.length === 0 ? (
-                <p className="text-sm text-neutral-500 text-center py-8">
-                  {t("server.noLogs")}
-                </p>
-              ) : (
-                <pre className="text-xs font-mono text-green-400 whitespace-pre-wrap break-all leading-5">
-                  {logLines.join("\n")}
-                </pre>
-              )}
-            </div>
-            {/* Footer */}
-            <div className="px-4 py-2 border-t border-neutral-700 text-xs text-neutral-500">
-              Auto-refreshing every 5s &middot; Last {logLines.length} lines
-            </div>
+                <div className="max-h-64 overflow-auto p-3">
+                  {logLoading && logLines.length === 0 ? (
+                    <div className="flex items-center justify-center h-20">
+                      <Loader2 className="w-4 h-4 animate-spin text-neutral-600" />
+                    </div>
+                  ) : logLines.length === 0 ? (
+                    <p className="text-xs text-neutral-600 text-center py-6">
+                      No logs available
+                    </p>
+                  ) : (
+                    <pre className="text-[11px] font-mono text-green-400 whitespace-pre-wrap break-all leading-5">
+                      {logLines.join("\n")}
+                    </pre>
+                  )}
+                  <div ref={logEndRef} />
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        ))}
+        {servers.length === 0 && (
+          <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 px-4 py-12 text-center">
+            <p className="text-sm text-neutral-400">
+              {t("servers.noServers")}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

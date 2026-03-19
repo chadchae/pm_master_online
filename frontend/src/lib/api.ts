@@ -92,6 +92,17 @@ export interface FileItem {
 
 export interface ServerStatus {
   project_name: string;
+  label: string;
+  description: string;
+  path: string;
+  stage: string;
+  backend_port: number | null;
+  frontend_port: number | null;
+  backend_alive: boolean;
+  frontend_alive: boolean;
+  backend_pid: string | null;
+  frontend_pid: string | null;
+  has_run_sh: boolean;
   port: number;
   status: string;
   pid: number | null;

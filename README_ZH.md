@@ -1,266 +1,249 @@
-# Next.js + FastAPI 全栈入门模板
+# Project Manager V2
 
-内置身份认证、基于会话的数据隔离、异步后台处理和分步工作流基础设施的生产级全栈入门模板。
+[English](README.md) | [Korean](README_KO.md)
+
+> **本地优先的个人项目中心**
+
+Project Manager V2 是一款本地优先的项目管理器，通过 Web 界面统一管理 `~/Projects/` 文件夹中的所有内容。无需数据库，直接与文件系统同步——文件夹结构即项目状态。通过看板面板可视化管理从创意到归档的 7 阶段生命周期，并为每个项目提供甘特图、问题追踪器、Todo 看板和 Markdown 文档编辑器。工作指令系统和内嵌终端（xterm.js）可直接与 Claude Code 集成，支持 AI 驱动的开发工作流。同时支持研究工作流（文献综述、分析、论文写作）和软件开发，统一在同一界面中完成。支持中韩英多语言、深色/浅色主题和一键安装，所有数据以本地 JSON 文件存储，确保完全的隐私保护。
+
+## 功能详情
+
+### 仪表板
+- 7 阶段项目生命周期看板（创意、启动、开发、测试、完成、归档、废弃）
+- 阶段间拖放 + 工作指令提示
+- 卡片/列表视图切换 + 多列排序
+- 类型筛选复选框（研究、开发、研究+开发、其他）
+- 卡片信息：标签、文件夹名、描述、元标签图标、进度条、目标完成日期、相关人员
+- 卡片操作（悬停）：编辑、下载（zip）、删除（移至回收站）
+- 活跃项目摘要：按类型计数（研究：N | 开发：N | 其他：N）
+
+### 项目详情（6 个标签页）
+- **Documents**：Markdown 编辑器（@uiw/react-md-editor）分割视图，文件夹深入浏览 + 面包屑导航，新建文件/文件夹，多选删除，打印/PDF 导出
+- **Instructions**：手动创建工作指令（文本 + 自定义检查清单），阶段转换时自动生成 `docs/work_instruction_YYYY-MM-DD.md`
+- **Todo**：3 列看板（待办 / 进行中 / 已完成），复选框切换，负责人，截止日期，优先级徽章，列间/列内拖放
+- **Issues**：线程式问题追踪器，状态（Open/In Progress/Resolved/Closed），优先级（Low~Critical），标签，筛选计数，评论 CRUD，内联编辑
+- **Schedule**：表格视图 + 甘特图（CSS/SVG，无第三方库），里程碑钻石标记，依赖箭头，30 色分类轨道，响应式日期宽度（1W/2W/3W/1M/All），今日标记，逾期检测
+- **Settings**：项目元数据（类型、重要性、严重性、紧急性、协作、所有者），时间线与进度，子任务 CRUD + 拖拽排序 + 进度条
+
+### 日程 / 甘特图
+- 任务 CRUD：负责人、日期、状态、分类、依赖关系
+- 甘特图：分类轨道、依赖箭头、今日线
+- 里程碑钻石标记
+- 父任务自动日期计算（基于依赖关系）
+- 30 色分类调色板 + 自动分配
+- 工期计算（包含起止日期，inclusive）
+- 依赖强制：前置任务未完成时锁定状态
+
+### 头部摘要小部件
+- Todo：已完成/总计 + 进度条 + todo/wip 计数
+- Issues：开放/总计 + open/done 计数
+- Schedule：计划中/进行中/已完成/逾期（实时数据）
+
+### 侧边栏面板
+- **Quick Note**：即时保存笔记到 `_notes/_temp/`，分为 5 个类别整理（研究创意/好奇心/思考/技术/个人）
+- **Work Execution**：扫描未完成的工作指令，在内嵌终端中启动 Claude Code（xterm.js + WebSocket PTY），提示中自动包含"完成后更新检查清单"
+- **Work Status**：全项目工作状态仪表板，每个项目的进度和检查清单详情
+
+### 创意页面
+- `1_idea_stage` 项目以卡片网格展示
+- 提升到启动阶段（关联工作指令弹窗）
+- 废弃到回收站
+- 创建新创意（文件夹名 / 显示名 / 描述 / 类型）
+
+### 全局功能
+| 功能 | 说明 |
+|------|------|
+| People | 联系人卡片（姓名/单位/角色/专业/关系），关联关系，从相关人员自动生成 |
+| Trash | 恢复（→ 1_idea_stage）/ 永久删除 |
+| 服务器控制 | start/stop/restart + 日志查看器（5 秒自动刷新） |
+| 讨论时间线 | 扫描所有项目 `_discussion.md` 文件，按月分组，按日期排序 |
+| 下载 | 项目 ZIP 压缩下载 |
+| i18n | 韩/英切换（280+ 翻译键） |
+| YAML Frontmatter | 标准化项目元数据 |
+| 新建项目 | 自动创建文件夹 + docs + `_idea_note.md` |
+| 安全移动 | 停止服务 → 移动文件夹 → 清理残留 |
+
+### UI/UX
+- 深色/浅色主题（`next-themes`）
+- 应用内模态对话框（不使用浏览器 prompt/confirm）
+- Markdown 渲染（`@uiw/react-markdown-preview`）
+- 文档打印/PDF 导出
+- 筛选状态 localStorage 持久化
 
 ## 前置要求
 
-- Python 3.12+
-- Node.js 18+
+- **macOS**（使用 `lsof` 管理端口）
+- **Python 3.12+**
+- **Node.js 18+**
 
 ## 快速开始
 
 ```bash
-git clone https://github.com/ChadApplication/_template.git
-cd _template
-./setup.sh          # 一键安装 (venv + npm + DB + seed)
+./setup.sh          # 一键安装 (venv + npm install)
 ./run.sh start      # 启动服务器
 ```
 
-打开 http://localhost:3001 并使用 `admin` / `admin` 登录。
+打开 http://localhost:3002 并使用 `admin` / `admin` 登录。
 
-### 默认账户
+## 在其他机器上安装
+
+### 1. 创建项目文件夹结构
+
+```bash
+mkdir -p ~/Projects/{1_idea_stage,2_initiation_stage,3_in_development,4_in_testing,5_completed,6_archived,7_discarded,_notes,_learning,_issues_common}
+```
+
+### 2. 克隆或复制应用
+
+将 `project-manager-v2` 放置在磁盘任意位置（例如 `~/Projects/3_in_development/` 内部）。
+
+### 3. 运行安装
+
+```bash
+cd project-manager-v2
+./setup.sh
+./run.sh start
+```
+
+### 4. 自定义项目根目录（可选）
+
+如果项目不在 `~/Projects` 中：
+
+```bash
+export PROJECTS_ROOT="/path/to/my/projects"
+./run.sh start
+```
+
+### 5. 自定义端口（可选）
+
+默认：后端 `8002`，前端 `3002`。覆盖方法：
+
+```bash
+echo "BACKEND_PORT=8010" > .run_ports
+echo "FRONTEND_PORT=3010" >> .run_ports
+```
+
+如果默认端口被占用，应用会自动查找空闲端口。
+
+## 必需的文件夹结构
+
+应用扫描 `~/Projects/`（或 `$PROJECTS_ROOT`）中的以下阶段文件夹：
+
+```
+~/Projects/
+  1_idea_stage/           # 创意和头脑风暴
+  2_initiation_stage/     # 已启动的项目（讨论）
+  3_in_development/       # 活跃开发
+  4_in_testing/           # 测试 / 分析阶段
+  5_completed/            # 完成 / 写作阶段
+  6_archived/             # 归档 / 已提交
+  7_discarded/            # 回收站
+  _notes/                 # 个人笔记
+  _learning/              # 学习日志
+  _issues_common/         # 跨项目问题记录
+```
+
+每个项目是阶段文件夹中的一个子文件夹。通过拖放或移动对话框在阶段间转移项目。
+
+## 数据存储
+
+所有应用数据本地存储在 `backend/data/` 中：
+
+| 数据 | 路径 | 说明 |
+|------|------|------|
+| 日程 | `backend/data/schedules/*.json` | 每个项目的甘特任务、里程碑、分类 |
+| Todo | `backend/data/todos/*.json` | 每个项目的看板待办事项 |
+| 问题 | `backend/data/issues/*.json` | 每个项目的问题追踪 |
+| 子任务 | `backend/data/subtasks/*.json` | 项目子任务 |
+| 用户 | `backend/data/users.json` | 登录账户（bcrypt 哈希） |
+| 卡片顺序 | `backend/data/card_order.json` | 仪表板看板卡片位置 |
+| People | `backend/data/people.json` | 人员目录 |
+
+迁移到其他机器时，复制 `backend/data/` 目录即可。
+
+## 默认账户
 
 | 用户名 | 密码 | 角色 |
 |----------|----------|------|
 | admin | admin | ADMIN |
 | guest | guest | GUEST |
 
-### 命令
+## 命令
 
 ```bash
-./run.sh start      # 启动 Backend + Frontend
+./run.sh start      # 启动后端 + 前端
 ./run.sh stop       # 停止所有服务器
-./run.sh restart    # 重启
+./run.sh restart    # 重启两个服务器
+./run.sh status     # 检查服务器状态
 ./run.sh live       # 启动 + 实时日志流
 ```
 
 ## 技术栈
-- **Backend:** Python 3.12 / FastAPI
-- **Frontend:** Next.js 15 (App Router) / React 19 / TailwindCSS / TypeScript
-- **Database:** Prisma ORM / SQLite（默认）
-- **Auth:** NextAuth.js (Credentials Provider)
 
----
-
-## 核心功能
-
-### 1. 身份认证 (NextAuth + Prisma)
-- 邮箱/密码登录和注册
-- 用于账户管理的 `User` 模型
-- 客户端和服务端组件间的统一认证会话
-- **Bearer 令牌认证** — 后端 `verify_token()` 从 `Authorization: Bearer {user_id}` 头中提取 user_id
-- **401 自动重定向** — 未认证请求返回 401，前端自动重定向到 `/login`
-- **无匿名回退** — `mock_token` 或缺失的令牌会被拒绝（防止数据污染）
-
-### 2. 基于会话的项目管理
-- 每次"新分析"在 `temp_uploads/{user_id}/{session_id}/` 创建唯一的 `session_id` 目录
-- **项目元数据**：仪表板上的卡片视图，包含标题、描述、创建日期、最后修改日期
-- **步骤完成追踪**：`GET /api/session/status` 自动检测哪些步骤已有结果
-- **单步重置**：`DELETE /api/step/{step}` 清除特定步骤数据，不影响其他步骤
-- **单步恢复**：`GET /api/step/{step}/results` 返回缓存结果以即时恢复 UI
-- **变量持久化**：`POST/GET /api/variables` 按会话保存和恢复变量定义
-
-### 3. 异步后台处理
-- **Fire-and-forget 模式** — 长时间运行的 LLM 端点立即返回 `{status: "processing"}`
-- **后台任务追踪** — `llm_tasks` 字典以 `"{user_id}:{step}"` 为键，防止跨步骤状态污染
-- **进度轮询** — `GET /api/progress?step=X` 返回实时进度 + 任务完成状态
-- **用户级锁定** — 每用户 `asyncio.Lock` 防止并发破坏性操作
-- **tqdm 集成** — 进度更新被猴子补丁写入 `progress.json` 供前端轮询
-- **代理超时** — `next.config.ts` 设置 `proxyTimeout: 300_000`（5分钟）
-
-### 4. CSV 安全处理
-- **全局 `to_csv` 猴子补丁** — 所有 `DataFrame.to_csv()` 调用自动使用 `quoting=csv.QUOTE_ALL`
-- 防止数据中特殊字符导致的 `need to escape, but no escapechar set` 错误
-
-### 5. UI/UX
-- **多语言 (i18n)**：通过用户设置或浏览器 cookie 支持韩语、英语、中文
-- **暗色模式**：`next-themes` 无水合闪烁
-- **应用内提示**：`react-hot-toast` 显示所有反馈消息
-- **活动追踪器**：将页面访问、按钮点击、IP/UserAgent 记录到数据库
-
-### 6. API 代理与基础设施
-- **Next.js rewrites** 将 `/api/*` 代理到 FastAPI 后端（从 `.run_ports` 自动检测端口）
-- **后端端口发现** — `run.sh` 查找空闲端口，写入 `.run_ports`，前端读取
-- **日志捕获** — `uvicorn.run(main.app)` 模式（非 `-m uvicorn`）以正确捕获 stdout
-- **日志存于 /tmp** — 避免 Dropbox/云同步对日志缓冲的干扰
-
----
-
-## API 端点
-
-### 会话管理
-| 方法 | 端点 | 说明 |
-|--------|----------|-------------|
-| POST | `/api/sessions` | 创建新会话 |
-| GET | `/api/sessions` | 列出用户的所有会话 |
-| DELETE | `/api/sessions/{session_id}` | 删除会话 |
-| GET | `/api/session/status` | 步骤完成状态 |
-
-### 步骤数据（每个分析步骤）
-| 方法 | 端点 | 说明 |
-|--------|----------|-------------|
-| GET | `/api/step/{step}/results` | 获取缓存的步骤结果 |
-| DELETE | `/api/step/{step}` | 删除步骤相关文件 |
-| GET | `/api/progress?step=X` | 进度 + 任务状态 |
-
-### 数据持久化
-| 方法 | 端点 | 说明 |
-|--------|----------|-------------|
-| POST | `/api/variables` | 保存变量定义 |
-| GET | `/api/variables` | 加载变量定义 |
-| POST | `/api/research-info` | 保存研究元数据 |
-| GET | `/api/research-info` | 加载研究元数据 |
-
-### 用户设置
-| 方法 | 端点 | 说明 |
-|--------|----------|-------------|
-| GET | `/api/settings` | 获取用户设置 |
-| POST | `/api/settings` | 保存用户设置 |
-
----
-
-## 快速开始
-
-### 1. 克隆并配置
-```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-```
-
-### 2. 后端设置
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 3. 前端设置
-```bash
-cd frontend
-npm install
-npx prisma db push
-npx prisma generate
-```
-
-### 4. 运行两个服务器
-```bash
-./run.sh start
-```
-
-### 默认端口
-- **Frontend:** http://localhost:3001
-- **Backend:** http://localhost:8001
-- **API Docs:** http://localhost:8001/docs
-
-### 其他命令
-```bash
-./run.sh stop      # 停止所有服务器
-./run.sh restart   # 重启所有服务器
-./run.sh status    # 检查服务器状态
-./run.sh live      # 实时日志流
-```
-
----
+- **Backend**: Python 3.12 / FastAPI / JSON 文件存储
+- **Frontend**: Next.js 15 (App Router) / React 19 / TailwindCSS / TypeScript
+- **Auth**: bcrypt + 文件令牌 (PyJWT)
+- **Editor**: @uiw/react-md-editor
+- **Markdown**: @uiw/react-markdown-preview
+- **Terminal**: @xterm/xterm + WebSocket PTY
+- **Icons**: Lucide React
+- **Notifications**: react-hot-toast
+- **Metadata**: YAML frontmatter (pyyaml)
 
 ## 架构
 
 ```
-_template_latest/
+project-manager-v2/
 ├── backend/
-│   ├── main.py                    # FastAPI 应用 + 会话基础设施
-│   ├── app/
-│   │   └── routers/
-│   │       └── session.py         # 会话 CRUD (Bearer 认证)
+│   ├── main.py                     # FastAPI 应用 + 所有端点
 │   ├── services/
-│   │   └── user_settings_service.py
-│   ├── temp_uploads/              # 按用户、按会话的数据 (gitignored)
-│   │   └── {user_id}/
-│   │       └── {session_id}/
-│   │           ├── variables.json
-│   │           ├── research_info.json
-│   │           ├── *_results.csv
-│   │           └── progress.json
+│   │   ├── scanner_service.py      # 项目扫描和元数据
+│   │   ├── schedule_service.py     # 日程/甘特/里程碑/分类
+│   │   ├── todo_service.py         # Todo 看板
+│   │   ├── issue_service.py        # 问题追踪器
+│   │   ├── subtask_service.py      # 项目子任务
+│   │   ├── document_service.py     # 文档文件管理
+│   │   ├── server_service.py       # 服务器控制 (run.sh)
+│   │   ├── common_folder_service.py # 笔记/学习/问题文件夹
+│   │   ├── people_service.py       # 人员目录
+│   │   └── auth_service.py         # JWT 认证
+│   ├── data/                       # 所有 JSON 数据 (gitignored)
+│   ├── requirements.txt
 │   └── venv/
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── dashboard/         # 会话列表 + 创建
-│   │   │   ├── analysis/[id]/     # 工作区（分析步骤）
-│   │   │   ├── login/
-│   │   │   └── admin/
+│   │   │   ├── dashboard/          # 主仪表板
+│   │   │   │   ├── page.tsx        # 看板 + 列表视图
+│   │   │   │   ├── ideas/          # 创意管理
+│   │   │   │   ├── projects/       # 项目列表 + 详情
+│   │   │   │   ├── [type]/         # 笔记/学习/问题
+│   │   │   │   ├── servers/        # 服务器状态
+│   │   │   │   ├── people/         # 人员目录
+│   │   │   │   ├── timeline/       # 时间线视图
+│   │   │   │   └── trash/          # 废弃项目
+│   │   │   └── layout.tsx
 │   │   ├── components/
-│   │   ├── services/
-│   │   │   └── sessionApi.ts      # Bearer 认证 + 401 重定向
-│   │   └── auth.ts                # NextAuth 配置
-│   ├── next.config.ts             # 代理 rewrites + 300秒超时
-│   └── package.json
-├── run.sh                         # 启动/停止/重启/实时日志
+│   │   │   ├── AppDialogs.tsx      # ConfirmDialog, PromptDialog, NewProjectDialog
+│   │   │   ├── Sidebar.tsx         # 导航
+│   │   │   ├── PageHeader.tsx      # 顶部标题
+│   │   │   ├── MoveProjectModal.tsx
+│   │   │   ├── MetaTags.tsx        # 项目元标签徽章
+│   │   │   ├── ProgressBar.tsx     # 子任务进度
+│   │   │   └── ...
+│   │   └── lib/
+│   │       ├── api.ts              # 带认证的 API 客户端
+│   │       ├── stages.ts           # 阶段配置
+│   │       ├── i18n.tsx            # 国际化
+│   │       └── useAuth.ts          # 认证钩子
+│   ├── package.json
+│   └── next.config.ts
+├── docs/
+├── run.sh                          # 启动/停止/重启/实时日志
+├── setup.sh                        # 一键安装
+├── CHANGELOG.md
 └── .gitignore
 ```
-
----
-
-## 添加新的分析步骤
-
-要在工作流中添加新步骤：
-
-1. **Backend**：添加 `(user_id, session_id, ...)` 签名的服务函数
-2. **Backend**：在 `main.py` 中使用 `_run_llm_in_background()` 添加异步处理端点
-3. **Frontend**：创建包含 `getToken` prop、`restoredOnce` 恢复守卫、使用后端 DELETE 的 `handleReset` 的组件
-4. **Frontend**：添加 `step=your_step_name` 参数的进度轮询
-5. **Backend**：`GET /api/session/status` 和 `DELETE /api/step/{step}` 端点自动检测匹配 `*_results.csv`/`*_results.json` 的文件
-
----
-
-## 关键模式
-
-### 认证流程
-```
-Frontend getToken() → session.user.id
-    ↓
-Authorization: Bearer {user_id}
-    ↓
-Backend verify_token() → {"sub": user_id}
-    ↓
-401 if missing/invalid → Frontend redirects to /login
-```
-
-### 异步处理流程
-```
-POST /api/your-endpoint → returns {status: "processing"} immediately
-    ↓
-Background: _run_llm_in_background(user_id, "step_name", service_fn, ...)
-    ↓
-Frontend polls: GET /api/progress?step=step_name
-    ↓
-{status: "complete", result: {...}} or {status: "error", error: "..."}
-```
-
-### 会话数据隔离
-```
-temp_uploads/
-├── user_abc/
-│   ├── session_001/     ← 隔离的工作区
-│   │   ├── variables.json
-│   │   └── step_results.csv
-│   └── session_002/     ← 独立的工作区
-│       └── ...
-└── user_xyz/            ← 不同用户，无交叉访问
-    └── ...
-```
-
-## 变更日志
-
-### v0.0.1 (2026-03-17)
-
-- 初始公开发布
-- macOS bash 3.2 兼容性修复 (run.sh)
-- Python 3.12.8 迁移
-- 数据库种子自动化（admin/guest 账户，通过 setup.sh）
-- dev.db 从 git 追踪中移除
-- 带自动版本号的版权页脚
-- setup.sh 一键安装
 
 ## 许可证
 

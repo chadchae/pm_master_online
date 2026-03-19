@@ -1,6 +1,74 @@
-# Project Manager
+# Project Manager V2
 
-Local-first project management dashboard for `~/Projects/`. Manages project lifecycle from idea to completion with kanban boards, schedule/gantt charts, document management, and issue tracking.
+[Korean](README_KO.md) | [Chinese](README_ZH.md)
+
+> **Local-first Personal Project Hub**
+
+Project Manager V2 is a local-first project manager that manages your entire `~/Projects/` folder from the web. It syncs directly with the filesystem without a database -- your folder structure *is* your project state. Visualize and manage a 7-stage lifecycle from idea to archive with kanban boards, and get per-project gantt charts, issue trackers, todo kanbans, and a markdown document editor. The work instruction system and embedded terminal (xterm.js) integrate directly with Claude Code to power AI-driven development workflows. It handles both research workflows (literature review, analysis, paper writing) and software development in a single interface. With Korean/English i18n, dark/light themes, and one-command setup, all data stays in local JSON files for complete privacy.
+
+## Features
+
+### Dashboard
+- Kanban board with 7-stage project lifecycle (Idea, Initiation, Development, Testing, Completed, Archived, Discarded)
+- Drag-and-drop between stages with work instruction prompts
+- Card/list view toggle with multi-column sorting
+- Type filter with checkbox (Research, Development, Research+Development, Other)
+- Card info: label, folder name, description, meta-tag icons, progress bar, target end date, related people
+- Card actions on hover: edit, download (zip), delete (to trash)
+- Active project summary with type-based counts (Research: N | Development: N | Other: N)
+
+### Project Detail (6 Tabs)
+- **Documents**: Markdown editor (@uiw/react-md-editor) with split view, folder drill-down with breadcrumb, new file/folder creation, multi-select delete, print/PDF export
+- **Instructions**: Manual work instruction creation (text + custom checklist), auto-generated `docs/work_instruction_YYYY-MM-DD.md` on stage transition
+- **Todo**: 3-column kanban (Todo / In Progress / Done), checkbox toggle, assignee, due date, priority badges, drag-and-drop between and within columns
+- **Issues**: Thread-based issue tracker with status (Open/In Progress/Resolved/Closed), priority (Low~Critical), labels, filter counts, comment CRUD, inline editing
+- **Schedule**: Table view + Gantt chart (CSS/SVG, no library), milestones with diamond markers, dependency arrows, category tracks with 30-color palette, responsive day width (1W/2W/3W/1M/All), today marker, overdue detection
+- **Settings**: Project metadata (type, importance, severity, urgency, collaboration, owner), timeline & progress, subtask CRUD with drag reorder and progress bar
+
+### Schedule / Gantt
+- Task CRUD with assignee, dates, status, categories, dependencies
+- Gantt chart with category tracks, dependency arrows, today line
+- Milestones with diamond markers on gantt
+- Parent task auto-date calculation from dependencies
+- 30-color category palette with auto-assignment
+- Duration calculation (inclusive start/end dates)
+- Dependency enforcement: locked status when predecessors incomplete
+
+### Header Summary Widgets
+- Todo: done/total + progress bar + todo/wip counts
+- Issues: open/total + open/done counts
+- Schedule: planned/in_progress/done/overdue (real data)
+
+### Sidebar Panels
+- **Quick Note**: Instant memo to `_notes/_temp/`, organize into 5 categories (Research Ideas/Curiosity/Thoughts/Technical/Personal)
+- **Work Execution**: Scan incomplete work instructions, launch Claude Code in embedded terminal (xterm.js + WebSocket PTY), auto-include "update checklist on completion" in prompt
+- **Work Status**: Full project work status dashboard with per-project progress and checklist detail
+
+### Ideas Page
+- `1_idea_stage` projects in card grid
+- Promote to Initiation (with work instruction modal)
+- Discard to trash
+- Create new idea (folder name / display name / description / type)
+
+### Global Features
+| Feature | Description |
+|---------|-------------|
+| People | Contact cards (name/org/role/expertise/relationship), connections, auto-generation from Related People |
+| Trash | Restore (to 1_idea_stage) / Permanent delete |
+| Server Control | start/stop/restart + log viewer (5s auto-refresh) |
+| Discussion Timeline | Scan all project `_discussion.md` files, monthly grouping, chronological |
+| Download | Project ZIP archive download |
+| i18n | Korean/English toggle (280+ translation keys) |
+| YAML Frontmatter | Standardized project metadata |
+| New Project | Auto-creates folder + docs + `_idea_note.md` |
+| Safe Move | Stop server -> move folder -> cleanup residuals |
+
+### UI/UX
+- Dark/light theme with `next-themes`
+- In-app modal dialogs (no browser prompt/confirm)
+- Markdown rendering with `@uiw/react-markdown-preview`
+- Print/PDF export for documents
+- Filter state persistence via localStorage
 
 ## Prerequisites
 
@@ -27,12 +95,12 @@ mkdir -p ~/Projects/{1_idea_stage,2_initiation_stage,3_in_development,4_in_testi
 
 ### 2. Clone or copy the app
 
-Place `project-manager` anywhere on disk (e.g., inside `~/Projects/3_in_development/` or a separate directory).
+Place `project-manager-v2` anywhere on disk (e.g., inside `~/Projects/3_in_development/` or a separate directory).
 
 ### 3. Run setup
 
 ```bash
-cd project-manager
+cd project-manager-v2
 ./setup.sh
 ./run.sh start
 ```
@@ -110,59 +178,22 @@ To migrate data to another machine, copy the `backend/data/` directory.
 ./run.sh live       # Start + live log streaming
 ```
 
-## Features
-
-### Dashboard
-- Kanban board with 5-stage project lifecycle
-- Drag-and-drop between stages with move instructions
-- Card/list view toggle with column sorting
-- Type filter: Personal, Research, Development, Other
-- Dashboard theme selector (A/B/C/D for light and dark modes)
-- Active project summary with colored badges
-
-### Project Detail
-- **Settings**: Project metadata (type, importance, severity, urgency, collaboration, people)
-- **Documents**: File browser with markdown editor and rendered preview
-- **Todos**: Kanban board (todo / in_progress / done)
-- **Issues**: Issue tracker with comments and timeline
-- **Schedule**: Task management with table and gantt chart views
-- **Work Orders**: Work instruction documents
-
-### Schedule / Gantt
-- Task CRUD with assignee, dates, status, categories, dependencies
-- Gantt chart with category tracks, dependency arrows, today line
-- Milestones with diamond markers on gantt
-- Parent task auto-date calculation
-- 30-color category palette with auto-assignment
-- Category rename and delete management
-- Duration calculation (inclusive start/end dates)
-
-### Ideas Page
-- Separate idea management with card/list view
-- Promote ideas to initiation stage
-- Sortable columns (name, type, importance, severity, urgency)
-
-### UI/UX
-- Dark/light theme with `next-themes`
-- In-app modal dialogs (no browser prompt/confirm)
-- Markdown file rendering with `@uiw/react-markdown-preview`
-- Print/PDF export for documents
-- Multi-language support (i18n)
-
 ## Tech Stack
 
 - **Backend**: Python 3.12 / FastAPI / JSON file storage
 - **Frontend**: Next.js 15 (App Router) / React 19 / TailwindCSS / TypeScript
-- **Auth**: JWT (bcrypt + PyJWT)
+- **Auth**: bcrypt + file-based token (PyJWT)
 - **Editor**: @uiw/react-md-editor
 - **Markdown**: @uiw/react-markdown-preview
+- **Terminal**: @xterm/xterm + WebSocket PTY
 - **Icons**: Lucide React
 - **Notifications**: react-hot-toast
+- **Metadata**: YAML frontmatter (pyyaml)
 
 ## Architecture
 
 ```
-project-manager/
+project-manager-v2/
 ├── backend/
 │   ├── main.py                     # FastAPI app + all endpoints
 │   ├── services/
@@ -203,7 +234,7 @@ project-manager/
 │   │   └── lib/
 │   │       ├── api.ts              # API client with auth
 │   │       ├── stages.ts           # Stage configuration
-│   │       ├── i18n.ts             # Internationalization
+│   │       ├── i18n.tsx            # Internationalization
 │   │       └── useAuth.ts          # Auth hook
 │   ├── package.json
 │   └── next.config.ts

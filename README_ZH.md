@@ -20,18 +20,18 @@ PM Master Online 专为在同一界面中同时支持软件开发和学术研究
 
 ## 截图
 
-> 截图文件位于 `docs/screenshots/` 文件夹中。
-
 | | | | |
 |:---:|:---:|:---:|:---:|
 | ![仪表盘看板](docs/screenshots/01-dashboard-kanban-dark.png) | ![创意卡片](docs/screenshots/02-ideas-card-dark.png) | ![创意列表](docs/screenshots/03-ideas-list-dark.png) | ![文档编辑器](docs/screenshots/04-document-editor-dark.png) |
-| 仪表盘看板 (暗色) | 创意卡片 | 创意列表视图 | 文档编辑器 |
+| 仪表盘看板 | 创意卡片 | 创意列表视图 | 文档编辑器 |
 | ![时间线](docs/screenshots/05-timeline-dark.png) | ![服务器](docs/screenshots/06-servers-dark.png) | ![联系人卡片](docs/screenshots/07-people-card-dark.png) | ![快速笔记](docs/screenshots/08-people-quicknote-dark.png) |
 | 讨论时间线 | 服务器控制 | 联系人卡片 (暗色) | 快速笔记面板 |
 | ![联系人编辑](docs/screenshots/09-people-modal-dark.png) | ![联系人亮色](docs/screenshots/10-people-card-light.png) | ![项目设置](docs/screenshots/11-project-settings-dark.png) | ![工作指令](docs/screenshots/12-work-instructions-dark.png) |
 | 联系人编辑对话框 | 联系人卡片 (亮色) | 项目设置 | 工作指令 |
 | ![待办看板](docs/screenshots/13-todo-kanban-dark.png) | ![问题](docs/screenshots/14-issues-dark.png) | ![日程表](docs/screenshots/15-schedule-table-dark.png) | ![甘特图](docs/screenshots/16-schedule-gantt-dark.png) |
 | 待办看板 | 问题追踪器 | 日程表 | 甘特图 |
+| ![本地文件夹](docs/screenshots/17-local-folder-structure.png) | | | |
+| 本地文件夹结构 | | | |
 
 ## 主要功能
 
@@ -271,6 +271,26 @@ project-manager-v2/
 ├── CHANGELOG.md
 └── .gitignore
 ```
+
+## 开发概况
+
+| 指标 | 数值 |
+|------|------|
+| 开发周期 | 2026-03-19 ~ 2026-03-20 (~8.5小时) |
+| 总代码量 | 16,182行 (43个文件) |
+| 前端 | 11,767行 / TypeScript + React 19 |
+| 后端 | 4,415行 / Python + FastAPI |
+| 提交次数 | 53次 |
+| AI成本 | ~$80-150 (Claude Opus 4) |
+| 同等人工开发成本 | ~$16,000 (320小时 @ $50/小时) |
+
+### 评估
+
+**优势**: "文件系统即数据库"的清晰设计哲学，零迁移成本。看板、甘特图、问题跟踪、待办事项、文档、服务器控制统一在单一界面中，功能密度极高。双用途设计，同时支持学术研究和软件开发工作流。本地JSON存储，完全保障隐私。
+
+**改进方向**: 3,500行以上的大型组件文件需要按标签页拆分。每页50多个useState需要使用Zustand或Context进行分组。空catch块需要分类错误处理。需要pytest + Playwright测试代码以防止回归。
+
+详细评估和路线图请参阅 [docs/evaluation-and-roadmap.md](docs/evaluation-and-roadmap.md)。
 
 ## 许可证
 

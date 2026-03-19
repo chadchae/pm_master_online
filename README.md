@@ -8,18 +8,18 @@ PM Master Online is a local-first project manager that manages your entire `~/Pr
 
 ## Screenshots
 
-> Place screenshot images in `docs/screenshots/` folder. Names below match the expected filenames.
-
 | | | | |
 |:---:|:---:|:---:|:---:|
 | ![Dashboard Kanban](docs/screenshots/01-dashboard-kanban-dark.png) | ![Ideas Cards](docs/screenshots/02-ideas-card-dark.png) | ![Ideas List](docs/screenshots/03-ideas-list-dark.png) | ![Document Editor](docs/screenshots/04-document-editor-dark.png) |
-| Dashboard Kanban (Dark) | Ideas Cards | Ideas List View | Document Editor |
+| Dashboard Kanban | Ideas Cards | Ideas List View | Document Editor |
 | ![Timeline](docs/screenshots/05-timeline-dark.png) | ![Servers](docs/screenshots/06-servers-dark.png) | ![People Cards](docs/screenshots/07-people-card-dark.png) | ![Quick Note](docs/screenshots/08-people-quicknote-dark.png) |
 | Discussion Timeline | Server Control | People Cards (Dark) | Quick Note Panel |
 | ![People Modal](docs/screenshots/09-people-modal-dark.png) | ![People Light](docs/screenshots/10-people-card-light.png) | ![Project Settings](docs/screenshots/11-project-settings-dark.png) | ![Work Instructions](docs/screenshots/12-work-instructions-dark.png) |
 | People Edit Modal | People Cards (Light) | Project Settings | Work Instructions |
 | ![Todo Kanban](docs/screenshots/13-todo-kanban-dark.png) | ![Issues](docs/screenshots/14-issues-dark.png) | ![Schedule Table](docs/screenshots/15-schedule-table-dark.png) | ![Schedule Gantt](docs/screenshots/16-schedule-gantt-dark.png) |
 | Todo Kanban | Issue Tracker | Schedule Table | Gantt Chart |
+| ![Local Folder](docs/screenshots/17-local-folder-structure.png) | | | |
+| Local Folder Structure | | | |
 
 ## Features
 
@@ -259,6 +259,26 @@ project-manager-v2/
 ├── CHANGELOG.md
 └── .gitignore
 ```
+
+## Development
+
+| Metric | Value |
+|--------|-------|
+| Development Period | 2026-03-19 ~ 2026-03-20 (~8.5 hours) |
+| Total Code | 16,182 lines (43 files) |
+| Frontend | 11,767 lines / TypeScript + React 19 |
+| Backend | 4,415 lines / Python + FastAPI |
+| Commits | 53 |
+| AI Cost | ~$80-150 (Claude Opus 4) |
+| Equivalent Manual Cost | ~$16,000 (320 hours @ $50/hr) |
+
+### Evaluation
+
+**Strengths**: Clear "filesystem as database" philosophy with zero migration overhead. High feature density — Kanban, Gantt, Issues, Todos, Documents, Server Control unified in one interface. Dual-purpose design supporting both academic research and software development workflows. Complete privacy with local JSON storage.
+
+**Areas for Improvement**: Large component files (3,500+ lines) should be split into per-tab components. 50+ useState hooks per page would benefit from Zustand or Context. Empty catch blocks need categorized error handling. Zero test coverage needs pytest + Playwright for regression prevention.
+
+For detailed evaluation and future roadmap, see [docs/evaluation-and-roadmap.md](docs/evaluation-and-roadmap.md).
 
 ## License
 

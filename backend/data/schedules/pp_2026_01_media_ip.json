@@ -2,25 +2,53 @@
   "tasks": [
     {
       "id": "dd8bb074-6027-4805-9fff-09cf86ea43b9",
-      "title": "ㅁ",
+      "title": "셋팅",
       "description": "",
-      "start_date": "",
-      "end_date": "",
-      "duration_days": 0,
-      "assignee": "",
-      "status": "planned",
+      "start_date": "2026-03-20",
+      "end_date": "2026-03-22",
+      "duration_days": 2,
+      "assignee": "채충일",
+      "status": "in_progress",
       "depends_on": [],
       "parent_id": "",
       "category": "",
       "progress_pct": 0,
       "order": 0
+    },
+    {
+      "id": "f0902da9-a4b6-4d7d-836b-c17013ed79a0",
+      "title": "리뷰",
+      "description": "",
+      "start_date": "2026-03-23",
+      "end_date": "2026-03-26",
+      "duration_days": 3,
+      "assignee": "원종호",
+      "status": "planned",
+      "depends_on": [],
+      "parent_id": "dd8bb074-6027-4805-9fff-09cf86ea43b9",
+      "category": "General",
+      "progress_pct": 0,
+      "order": 1
     }
   ],
-  "milestones": [],
+  "milestones": [
+    {
+      "id": "9a37b133-d6bd-4392-9d26-b98e927e8479",
+      "title": "보고1",
+      "date": "2026-03-28",
+      "description": "보고1",
+      "linked_tasks": [],
+      "status": "upcoming"
+    }
+  ],
   "categories": [
     {
       "name": "General",
       "color": "#6b7280"
+    },
+    {
+      "name": "오너",
+      "color": "#203255"
     }
   ]
 }

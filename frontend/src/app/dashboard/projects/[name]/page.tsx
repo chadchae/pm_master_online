@@ -1281,11 +1281,17 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
 
-              {/* Schedule placeholder */}
-              <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 min-w-[120px] text-center opacity-50">
-                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Schedule</p>
-                <p className="text-lg font-bold text-neutral-400">-</p>
-                <p className="text-xs text-neutral-400 mt-1">Coming soon</p>
+              {/* Schedule summary */}
+              <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 min-w-[120px] text-center">
+                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">{t("schedule.title")}</p>
+                <p className="text-lg font-bold text-neutral-900 dark:text-white">{summary.schedule.done}/{summary.schedule.total}</p>
+                <div className="h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full mt-1.5 overflow-hidden">
+                  <div className="h-full bg-green-500 rounded-full" style={{ width: `${summary.schedule.total > 0 ? Math.round(summary.schedule.done / summary.schedule.total * 100) : 0}%` }} />
+                </div>
+                <div className="flex justify-between text-xs text-neutral-400 mt-1">
+                  <span>{summary.schedule.in_progress} wip</span>
+                  <span>{summary.schedule.overdue > 0 ? <span className="text-red-500">{summary.schedule.overdue} late</span> : `${summary.schedule.planned} plan`}</span>
+                </div>
               </div>
             </div>
           )}

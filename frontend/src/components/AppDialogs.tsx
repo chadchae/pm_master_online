@@ -177,7 +177,7 @@ export function NewProjectDialog({ open, onConfirm, onCancel }: NewProjectDialog
           <div>
             <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1.5 block">Type</label>
             <div className="flex flex-wrap gap-2">
-              {["개인", "개발", "연구", "연구+개발"].map((t) => (
+              {["개인", "개발", "연구", "연구+개발", "사업", "커리큘럼디벨롭"].map((t) => (
                 <button key={t} onClick={() => { setTypeChoice(t); setShowCustom(false); }} className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${!showCustom && typeChoice === t ? "bg-indigo-600 text-white border-indigo-600" : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:border-indigo-300"}`}>{t}</button>
               ))}
               <button onClick={() => setShowCustom(true)} className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${showCustom ? "bg-indigo-600 text-white border-indigo-600" : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:border-indigo-300"}`}>+ Custom</button>

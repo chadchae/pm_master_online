@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, LogOut } from "lucide-react";
+import { ChevronRight, LogOut, RefreshCw } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
-import { clearToken } from "@/lib/api";
+import { apiFetch, clearToken } from "@/lib/api";
+import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { useLocale, LocaleToggle } from "@/lib/i18n";
 
@@ -60,6 +62,20 @@ export function PageHeader() {
   const router = useRouter();
   const { t } = useLocale();
   const { breadcrumbs } = getPageTitle(pathname, t);
+  const [scanning, setScanning] = useState(false);
+
+  const handleRescan = async () => {
+    setScanning(true);
+    try {
+      await apiFetch("/api/projects");
+      toast.success("Scan complete");
+      window.location.reload();
+    } catch {
+      toast.error("Scan failed");
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const handleLogout = () => {
     clearToken();
@@ -88,6 +104,14 @@ export function PageHeader() {
             </span>
           ))}
         </nav>
+        <button
+          onClick={handleRescan}
+          disabled={scanning}
+          className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-indigo-500 transition-colors ml-2"
+          title="Rescan projects"
+        >
+          <RefreshCw className={`w-4 h-4 ${scanning ? "animate-spin" : ""}`} />
+        </button>
       </div>
 
       <div className="flex items-center gap-2">

@@ -3302,6 +3302,54 @@ export default function ProjectDetailPage() {
                   )}
                   <option value="__custom__">+ 직접 입력</option>
                 </select>
+                {metaDraft.유형 && (
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <button
+                      onClick={() => {
+                        setPromptDialog({
+                          title: `Rename Type "${metaDraft.유형}"`,
+                          defaultValue: metaDraft.유형,
+                          onConfirm: async (newName) => {
+                            setPromptDialog(null);
+                            if (newName.trim() && newName.trim() !== metaDraft.유형) {
+                              try {
+                                await apiFetch("/api/projects/rename-type", {
+                                  method: "PUT",
+                                  body: JSON.stringify({ old_type: metaDraft.유형, new_type: newName.trim() }),
+                                });
+                                setMetaDraft((d) => ({ ...d, 유형: newName.trim() }));
+                                loadProject();
+                                toast.success(`Renamed → "${newName.trim()}"`);
+                              } catch { toast.error("Failed"); }
+                            }
+                          },
+                        });
+                      }}
+                      className="text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-0.5"
+                    >
+                      <Pencil className="w-3 h-3" /> Rename All
+                    </button>
+                    <button
+                      onClick={() => {
+                        setConfirmDialog({
+                          message: `Delete type "${metaDraft.유형}" from ALL projects?`,
+                          onConfirm: async () => {
+                            setConfirmDialog(null);
+                            try {
+                              await apiFetch(`/api/projects/delete-type/${encodeURIComponent(metaDraft.유형)}`, { method: "DELETE" });
+                              setMetaDraft((d) => ({ ...d, 유형: "" }));
+                              loadProject();
+                              toast.success("Type deleted");
+                            } catch { toast.error("Failed"); }
+                          },
+                        });
+                      }}
+                      className="text-xs text-red-400 hover:text-red-600 flex items-center gap-0.5"
+                    >
+                      <Trash2 className="w-3 h-3" /> Delete All
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Port */}

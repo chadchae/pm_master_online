@@ -766,6 +766,7 @@ export default function DashboardPage() {
                       {sortKey === "modified" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -817,6 +818,35 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs">
                         {project.last_modified ? project.last_modified.split("T")[0] : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`)}
+                            className="p-1 text-neutral-400 hover:text-indigo-500 rounded"
+                            title="Edit"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setConfirmDialog({
+                                message: `Delete "${project.metadata?.label || project.name}"?`,
+                                onConfirm: () => {
+                                  setConfirmDialog(null);
+                                  apiFetch("/api/projects/move", {
+                                    method: "POST",
+                                    body: JSON.stringify({ project_name: project.name, from_stage: project.stage, to_stage: "7_discarded", instruction: "" }),
+                                  }).then(() => { loadData(); toast.success("Moved to trash"); }).catch(() => toast.error("Failed"));
+                                },
+                              });
+                            }}
+                            className="p-1 text-neutral-400 hover:text-red-500 rounded"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

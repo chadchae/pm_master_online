@@ -18,6 +18,7 @@ import {
   LayoutGrid,
   List,
   Pencil,
+  GripVertical,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { MetaTags } from "@/components/MetaTags";
@@ -48,6 +49,15 @@ export default function IdeasPage() {
   const [newDesc, setNewDesc] = useState("");
   const [newType, setNewType] = useState("");
   const [creating, setCreating] = useState(false);
+  const [draggedIdea, setDraggedIdea] = useState<string | null>(null);
+  const [dragOverIdea, setDragOverIdea] = useState<string | null>(null);
+  const [ideaOrder, setIdeaOrder] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("pm_ideaOrder");
+      if (saved) { try { return JSON.parse(saved); } catch {} }
+    }
+    return [];
+  });
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [promptDialog, setPromptDialog] = useState<{ title: string; defaultValue?: string; onConfirm: (val: string) => void } | null>(null);
   const [typeFilters, setTypeFilters] = useState<Set<string>>(() => {
@@ -61,6 +71,10 @@ export default function IdeasPage() {
   useEffect(() => {
     localStorage.setItem("pm_ideaTypeFilters", JSON.stringify([...typeFilters]));
   }, [typeFilters]);
+
+  useEffect(() => {
+    localStorage.setItem("pm_ideaOrder", JSON.stringify(ideaOrder));
+  }, [ideaOrder]);
 
   useEffect(() => {
     loadIdeas();
@@ -211,6 +225,15 @@ export default function IdeasPage() {
     return sortDir === "asc" ? cmp : -cmp;
   });
 
+  const orderedFiltered = [...filtered].sort((a, b) => {
+    const ai = ideaOrder.indexOf(a.name);
+    const bi = ideaOrder.indexOf(b.name);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -346,7 +369,7 @@ export default function IdeasPage() {
         </div>
       ) : viewMode === "kanban" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((idea) => {
+          {orderedFiltered.map((idea) => {
             const typeClass = Object.entries(typeColors).find(
               ([k]) => idea.metadata?.["유형"]?.includes(k)
             )?.[1] || typeColors["Untyped"];
@@ -354,7 +377,29 @@ export default function IdeasPage() {
             return (
               <div
                 key={idea.name}
-                className={`bg-white dark:bg-neutral-900 rounded-xl border border-neutral-300 dark:border-neutral-800 border-l-4 ${typeClass} overflow-hidden hover:shadow-md transition-shadow`}
+                draggable
+                onDragStart={() => setDraggedIdea(idea.name)}
+                onDragOver={(e) => { e.preventDefault(); setDragOverIdea(idea.name); }}
+                onDragLeave={() => setDragOverIdea(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (draggedIdea && draggedIdea !== idea.name) {
+                    const names = orderedFiltered.map(p => p.name);
+                    const fromIdx = names.indexOf(draggedIdea);
+                    const toIdx = names.indexOf(idea.name);
+                    if (fromIdx !== -1 && toIdx !== -1) {
+                      names.splice(fromIdx, 1);
+                      names.splice(toIdx, 0, draggedIdea);
+                      setIdeaOrder(names);
+                    }
+                  }
+                  setDraggedIdea(null);
+                  setDragOverIdea(null);
+                }}
+                onDragEnd={() => { setDraggedIdea(null); setDragOverIdea(null); }}
+                className={`group bg-white dark:bg-neutral-900 rounded-xl border border-l-4 ${typeClass} overflow-hidden hover:shadow-md transition-shadow ${
+                  draggedIdea === idea.name ? "opacity-50 border-neutral-300 dark:border-neutral-800" : dragOverIdea === idea.name ? "border-amber-400 dark:border-amber-500" : "border-neutral-300 dark:border-neutral-800"
+                }`}
               >
                 {/* Card Header */}
                 <div
@@ -365,54 +410,59 @@ export default function IdeasPage() {
                     )
                   }
                 >
-                  <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
-                    {idea.metadata?.label || idea.name}
-                  </h3>
-                  {idea.metadata?.label && (
-                    <p className="text-xs text-neutral-400 font-mono">{idea.name}</p>
-                  )}
-                  {idea.metadata?.description && (
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1.5 leading-relaxed line-clamp-3">
-                      {idea.metadata.description}
-                    </p>
-                  )}
-                  <div className="mt-2">
-                    <MetaTags metadata={idea.metadata} />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    {idea.metadata?.["유형"] && (() => {
-                      const t = idea.metadata["유형"];
-                      const colors: Record<string, string> = {
-                        "개인": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
-                        "연구": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
-                        "개발": "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-                        "사업": "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-                      };
-                      return <span className={`text-xs px-1.5 py-0.5 rounded ${colors[t] || "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"}`}>{t}</span>;
-                    })()}
-                    {idea.metadata?.["포트"] && (
-                      <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                        <Monitor className="w-3 h-3" />
-                        :{idea.metadata["포트"]}
-                      </span>
-                    )}
-                    {idea.metadata?.["작성일"] && (
-                      <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                        <Calendar className="w-3 h-3" />
-                        {idea.metadata["작성일"]}
-                      </span>
-                    )}
-                    {idea.last_modified && (
-                      <span className="text-xs text-green-600 dark:text-green-400">
-                        {idea.last_modified.split("T")[0]}
-                      </span>
-                    )}
-                    {idea.has_docs && (
-                      <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                        <FileText className="w-3 h-3" />
-                        docs
-                      </span>
-                    )}
+                  <div className="flex items-start gap-1.5">
+                    <GripVertical className="w-3.5 h-3.5 text-neutral-300 dark:text-neutral-600 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
+                        {idea.metadata?.label || idea.name}
+                      </h3>
+                      {idea.metadata?.label && (
+                        <p className="text-xs text-neutral-400 font-mono">{idea.name}</p>
+                      )}
+                      {idea.metadata?.description && (
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1.5 leading-relaxed line-clamp-3">
+                          {idea.metadata.description}
+                        </p>
+                      )}
+                      <div className="mt-2">
+                        <MetaTags metadata={idea.metadata} />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {idea.metadata?.["유형"] && (() => {
+                          const t = idea.metadata["유형"];
+                          const colors: Record<string, string> = {
+                            "개인": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
+                            "연구": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
+                            "개발": "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+                            "사업": "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+                          };
+                          return <span className={`text-xs px-1.5 py-0.5 rounded ${colors[t] || "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"}`}>{t}</span>;
+                        })()}
+                        {idea.metadata?.["포트"] && (
+                          <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            <Monitor className="w-3 h-3" />
+                            :{idea.metadata["포트"]}
+                          </span>
+                        )}
+                        {idea.metadata?.["작성일"] && (
+                          <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            <Calendar className="w-3 h-3" />
+                            {idea.metadata["작성일"]}
+                          </span>
+                        )}
+                        {idea.last_modified && (
+                          <span className="text-xs text-green-600 dark:text-green-400">
+                            {idea.last_modified.split("T")[0]}
+                          </span>
+                        )}
+                        {idea.has_docs && (
+                          <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            <FileText className="w-3 h-3" />
+                            docs
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

@@ -3107,7 +3107,7 @@ export default function ProjectDetailPage() {
                                 <div
                                   className="absolute top-0 pointer-events-none"
                                   style={{
-                                    left: todayOffset * dayWidth + dayWidth / 2,
+                                    left: todayOffset * dayWidth,
                                     height: totalChartHeight,
                                     width: 2,
                                     backgroundColor: "rgb(239 68 68)",

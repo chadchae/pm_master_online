@@ -2976,18 +2976,6 @@ export default function ProjectDetailPage() {
                                     />
                                   )
                               )}
-                              {/* Today line — z-20 to render in front of task bars */}
-                              {todayOffset >= 0 && todayOffset < totalDays && (
-                                <div
-                                  className="absolute top-0 z-20 pointer-events-none"
-                                  style={{
-                                    left: todayOffset * dayWidth + dayWidth / 2,
-                                    height: totalChartHeight,
-                                    width: 2,
-                                    backgroundColor: "rgb(239 68 68)",
-                                  }}
-                                />
-                              )}
                               {/* Milestone row area */}
                               {milestones.map((ms) => {
                                 const msOffset = Math.floor(
@@ -3115,6 +3103,19 @@ export default function ProjectDetailPage() {
                                   });
                                 })}
                               </svg>
+                              {/* Today line — rendered AFTER task bars so it appears in front */}
+                              {todayOffset >= 0 && todayOffset < totalDays && (
+                                <div
+                                  className="absolute top-0 pointer-events-none"
+                                  style={{
+                                    left: todayOffset * dayWidth + dayWidth / 2,
+                                    height: totalChartHeight,
+                                    width: 2,
+                                    backgroundColor: "rgb(239 68 68)",
+                                    zIndex: 50,
+                                  }}
+                                />
+                              )}
                             </div>
                           );
                         })()}

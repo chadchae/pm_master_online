@@ -34,6 +34,10 @@ import {
   Send,
   ChevronDown,
   ChevronUp,
+  GripVertical,
+  Ban,
+  Check,
+  Circle,
 } from "lucide-react";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
@@ -90,11 +94,27 @@ export default function ProjectDetailPage() {
     오너: "",
     목표종료일: "",
     실제종료일: "",
-    subtasks_total: "",
-    subtasks_done: "",
     related_people: "",
   });
   const [metaInitialized, setMetaInitialized] = useState(false);
+
+  // Subtask state
+  interface Subtask {
+    id: string;
+    title: string;
+    description: string;
+    status: "pending" | "done" | "cancelled";
+    order: number;
+    created_at: string;
+    completed_at: string;
+  }
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [newSubtaskDesc, setNewSubtaskDesc] = useState("");
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [editSubtaskTitle, setEditSubtaskTitle] = useState("");
+  const [editSubtaskDesc, setEditSubtaskDesc] = useState("");
+  const [dragSubtaskId, setDragSubtaskId] = useState<string | null>(null);
 
   // Todo state
   interface TodoItem {
@@ -562,8 +582,6 @@ export default function ProjectDetailPage() {
         오너: project.metadata?.["오너"] || "Chad",
         목표종료일: project.metadata?.["목표종료일"] || "",
         실제종료일: project.metadata?.["실제종료일"] || "",
-        subtasks_total: project.metadata?.subtasks_total || "",
-        subtasks_done: project.metadata?.subtasks_done || "",
         related_people: project.metadata?.related_people || "Chad (Chungil Chae)",
       });
       setMetaInitialized(true);
@@ -578,7 +596,7 @@ export default function ProjectDetailPage() {
         body: JSON.stringify({ metadata: metaDraft }),
       });
       setProject((prev) =>
-        prev ? { ...prev, metadata: { ...prev.metadata, ...metaDraft } } : prev
+        prev ? { ...prev, metadata: { ...prev.metadata, ...metaDraft } as unknown as Project["metadata"] } : prev
       );
       toast.success(t("toast.metadataSaved"));
     } catch {
@@ -587,6 +605,124 @@ export default function ProjectDetailPage() {
       setSavingMeta(false);
     }
   };
+
+  // --- Subtask API functions ---
+  const loadSubtasks = async () => {
+    try {
+      const data = await apiFetch<{ subtasks: Subtask[] }>(
+        `/api/projects/${encodeURIComponent(name)}/subtasks`
+      );
+      setSubtasks(data.subtasks || []);
+    } catch {
+      // Silently fail on initial load
+    }
+  };
+
+  const addSubtask = async () => {
+    if (!newSubtaskTitle.trim()) return;
+    try {
+      const subtask = await apiFetch<Subtask>(
+        `/api/projects/${encodeURIComponent(name)}/subtasks`,
+        {
+          method: "POST",
+          body: JSON.stringify({ title: newSubtaskTitle.trim(), description: newSubtaskDesc.trim() }),
+        }
+      );
+      setSubtasks((prev) => [...prev, subtask]);
+      setNewSubtaskTitle("");
+      setNewSubtaskDesc("");
+    } catch {
+      toast.error(t("toast.failedToCreate"));
+    }
+  };
+
+  const toggleSubtask = async (subtaskId: string, status: "pending" | "done" | "cancelled") => {
+    try {
+      const updated = await apiFetch<Subtask>(
+        `/api/projects/${encodeURIComponent(name)}/subtasks/${subtaskId}/toggle`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ status }),
+        }
+      );
+      setSubtasks((prev) => prev.map((s) => (s.id === subtaskId ? updated : s)));
+    } catch {
+      toast.error(t("toast.failedToSave"));
+    }
+  };
+
+  const updateSubtask = async (subtaskId: string) => {
+    try {
+      const updated = await apiFetch<Subtask>(
+        `/api/projects/${encodeURIComponent(name)}/subtasks/${subtaskId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ title: editSubtaskTitle, description: editSubtaskDesc }),
+        }
+      );
+      setSubtasks((prev) => prev.map((s) => (s.id === subtaskId ? updated : s)));
+      setEditingSubtaskId(null);
+    } catch {
+      toast.error(t("toast.failedToSave"));
+    }
+  };
+
+  const deleteSubtask = async (subtaskId: string) => {
+    if (!confirm(t("subtask.deleteConfirm"))) return;
+    try {
+      await apiFetch(
+        `/api/projects/${encodeURIComponent(name)}/subtasks/${subtaskId}`,
+        { method: "DELETE" }
+      );
+      setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
+    } catch {
+      toast.error(t("toast.failedToDelete"));
+    }
+  };
+
+  const handleSubtaskDragStart = (subtaskId: string) => {
+    setDragSubtaskId(subtaskId);
+  };
+
+  const handleSubtaskDragOver = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!dragSubtaskId || dragSubtaskId === targetId) return;
+    setSubtasks((prev) => {
+      const items = [...prev];
+      const fromIdx = items.findIndex((s) => s.id === dragSubtaskId);
+      const toIdx = items.findIndex((s) => s.id === targetId);
+      if (fromIdx < 0 || toIdx < 0) return prev;
+      const [moved] = items.splice(fromIdx, 1);
+      items.splice(toIdx, 0, moved);
+      return items;
+    });
+  };
+
+  const handleSubtaskDragEnd = async () => {
+    if (!dragSubtaskId) return;
+    setDragSubtaskId(null);
+    // Persist new order
+    const orderedIds = subtasks.map((s) => s.id);
+    try {
+      await apiFetch(
+        `/api/projects/${encodeURIComponent(name)}/subtasks/reorder`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ ordered_ids: orderedIds }),
+        }
+      );
+    } catch {
+      // Reload on error
+      loadSubtasks();
+    }
+  };
+
+  // Load subtasks when project loads or settings tab activates
+  useEffect(() => {
+    if (project && activeTab === "settings") {
+      loadSubtasks();
+    }
+  }, [project, activeTab]);
 
   const saveLabel = async () => {
     setSavingLabel(true);
@@ -1919,12 +2055,13 @@ export default function ProjectDetailPage() {
           {/* Timeline & Progress */}
           <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5">
             <h3 className="text-sm font-semibold text-neutral-900 dark:text-white mb-4">
-              Timeline & Progress
+              {t("project.timelineProgress")}
             </h3>
+            {/* Date fields */}
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1.5 block">
-                  Target End Date
+                  {t("project.targetEndDate")}
                 </label>
                 <input
                   type="date"
@@ -1935,7 +2072,7 @@ export default function ProjectDetailPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1.5 block">
-                  Actual End Date
+                  {t("project.actualEndDate")}
                 </label>
                 <input
                   type="date"
@@ -1946,53 +2083,13 @@ export default function ProjectDetailPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1.5 block">
-                  Today
+                  {t("project.today")}
                 </label>
                 <p className="px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-300">
                   {new Date().toISOString().split("T")[0]}
                 </p>
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1.5 block">
-                  Subtasks Total
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={metaDraft.subtasks_total}
-                  onChange={(e) => setMetaDraft((d) => ({ ...d, subtasks_total: e.target.value }))}
-                  placeholder="0"
-                  className="w-full px-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1.5 block">
-                  Subtasks Done
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max={metaDraft.subtasks_total || "999"}
-                  value={metaDraft.subtasks_done}
-                  onChange={(e) => setMetaDraft((d) => ({ ...d, subtasks_done: e.target.value }))}
-                  placeholder="0"
-                  className="w-full px-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-            </div>
-
-            {/* Progress preview */}
-            {parseInt(metaDraft.subtasks_total || "0") > 0 && (
-              <ProgressBar
-                metadata={{
-                  subtasks_total: metaDraft.subtasks_total,
-                  subtasks_done: metaDraft.subtasks_done,
-                }}
-              />
-            )}
 
             <div className="mt-4 flex justify-end">
               <button
@@ -2001,7 +2098,194 @@ export default function ProjectDetailPage() {
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-40 transition-colors flex items-center gap-2"
               >
                 {savingMeta ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save
+                {t("action.save")}
+              </button>
+            </div>
+
+            {/* Progress bar from real subtask data */}
+            {subtasks.length > 0 && (
+              <div className="mt-5">
+                <ProgressBar
+                  metadata={{
+                    subtasks_total: String(subtasks.length),
+                    subtasks_done: String(subtasks.filter((s) => s.status === "done").length),
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Subtask counts */}
+            <div className="mt-4 mb-3">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                {subtasks.length} {t("subtask.subtasks")}:{" "}
+                <span className="text-green-600 dark:text-green-400">{subtasks.filter((s) => s.status === "done").length} {t("subtask.done")}</span>,{" "}
+                <span className="text-red-500 dark:text-red-400">{subtasks.filter((s) => s.status === "cancelled").length} {t("subtask.cancelled")}</span>,{" "}
+                <span className="text-neutral-600 dark:text-neutral-300">{subtasks.filter((s) => s.status === "pending").length} {t("subtask.pending")}</span>
+              </p>
+            </div>
+
+            {/* Subtask list */}
+            <div className="space-y-1">
+              {subtasks.length === 0 && (
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 py-2">{t("subtask.noSubtasks")}</p>
+              )}
+              {subtasks.map((st) => (
+                <div
+                  key={st.id}
+                  draggable
+                  onDragStart={() => handleSubtaskDragStart(st.id)}
+                  onDragOver={(e) => handleSubtaskDragOver(e, st.id)}
+                  onDragEnd={handleSubtaskDragEnd}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border transition-colors group ${
+                    dragSubtaskId === st.id
+                      ? "opacity-50 border-indigo-300 dark:border-indigo-600"
+                      : "border-transparent hover:border-neutral-200 dark:hover:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
+                  } ${st.status === "cancelled" ? "opacity-60" : ""}`}
+                >
+                  {/* Drag handle */}
+                  <GripVertical className="w-3.5 h-3.5 text-neutral-300 dark:text-neutral-600 cursor-grab shrink-0" />
+
+                  {/* Checkbox / status toggle */}
+                  {st.status === "done" ? (
+                    <button
+                      onClick={() => toggleSubtask(st.id, "pending")}
+                      className="shrink-0 text-green-500 hover:text-green-600"
+                      title={t("subtask.done")}
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                    </button>
+                  ) : st.status === "cancelled" ? (
+                    <button
+                      onClick={() => toggleSubtask(st.id, "pending")}
+                      className="shrink-0 text-red-400 hover:text-red-500"
+                      title={t("subtask.cancelled")}
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => toggleSubtask(st.id, "done")}
+                      className="shrink-0 text-neutral-300 dark:text-neutral-600 hover:text-green-500"
+                      title={t("subtask.pending")}
+                    >
+                      <Circle className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {/* Title & description */}
+                  {editingSubtaskId === st.id ? (
+                    <div className="flex-1 flex items-center gap-2">
+                      <input
+                        value={editSubtaskTitle}
+                        onChange={(e) => setEditSubtaskTitle(e.target.value)}
+                        className="flex-1 px-2 py-0.5 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") updateSubtask(st.id);
+                          if (e.key === "Escape") setEditingSubtaskId(null);
+                        }}
+                      />
+                      <input
+                        value={editSubtaskDesc}
+                        onChange={(e) => setEditSubtaskDesc(e.target.value)}
+                        placeholder={t("subtask.description")}
+                        className="flex-1 px-2 py-0.5 text-xs bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") updateSubtask(st.id);
+                          if (e.key === "Escape") setEditingSubtaskId(null);
+                        }}
+                      />
+                      <button onClick={() => updateSubtask(st.id)} className="text-green-500 hover:text-green-600">
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => setEditingSubtaskId(null)} className="text-neutral-400 hover:text-neutral-600">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex-1 min-w-0">
+                      <span
+                        className={`text-sm ${
+                          st.status === "cancelled"
+                            ? "line-through text-neutral-400 dark:text-neutral-500"
+                            : st.status === "done"
+                            ? "line-through text-neutral-500 dark:text-neutral-400"
+                            : "text-neutral-800 dark:text-neutral-200"
+                        }`}
+                      >
+                        {st.title}
+                      </span>
+                      {st.description && (
+                        <span className="ml-2 text-xs text-neutral-400 dark:text-neutral-500 truncate">
+                          {st.description}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Action buttons (visible on hover) */}
+                  {editingSubtaskId !== st.id && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      {st.status === "pending" && (
+                        <button
+                          onClick={() => toggleSubtask(st.id, "cancelled")}
+                          className="p-0.5 text-neutral-400 hover:text-red-500"
+                          title={t("subtask.cancelled")}
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setEditingSubtaskId(st.id);
+                          setEditSubtaskTitle(st.title);
+                          setEditSubtaskDesc(st.description);
+                        }}
+                        className="p-0.5 text-neutral-400 hover:text-indigo-500"
+                        title={t("action.edit")}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteSubtask(st.id)}
+                        className="p-0.5 text-neutral-400 hover:text-red-500"
+                        title={t("action.delete")}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add subtask form */}
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                value={newSubtaskTitle}
+                onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                placeholder={t("subtask.title")}
+                className="flex-1 px-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newSubtaskTitle.trim()) addSubtask();
+                }}
+              />
+              <input
+                value={newSubtaskDesc}
+                onChange={(e) => setNewSubtaskDesc(e.target.value)}
+                placeholder={`${t("subtask.description")} (${t("todo.description")})`}
+                className="flex-1 px-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newSubtaskTitle.trim()) addSubtask();
+                }}
+              />
+              <button
+                onClick={addSubtask}
+                disabled={!newSubtaskTitle.trim()}
+                className="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:opacity-40 transition-colors flex items-center gap-1.5 shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {t("subtask.addSubtask")}
               </button>
             </div>
           </div>

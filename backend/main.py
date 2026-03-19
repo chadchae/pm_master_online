@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from services import auth_service, scanner_service, document_service
 from services import common_folder_service, server_service, people_service
-from services import todo_service, issue_service
+from services import todo_service, issue_service, subtask_service
 
 app = FastAPI(title="Project Manager", version="0.1.0")
 
@@ -801,7 +801,7 @@ def move_todo(project_name: str, todo_id: str, body: TodoMoveRequest):
 
 @app.get("/api/projects/{project_name}/summary")
 def get_project_summary(project_name: str):
-    """Get todo/issues/schedule summary for project header widget."""
+    """Get todo/issues/schedule/subtask summary for project header widget."""
     todo_data = todo_service.list_todos(project_name)
     items = todo_data.get("items", [])
     todo_count = len([i for i in items if i["column"] == "todo"])
@@ -813,6 +813,8 @@ def get_project_summary(project_name: str):
     issues_list = issue_data.get("issues", [])
     open_issues = len([i for i in issues_list if i["status"] in ("open", "in_progress")])
     resolved_issues = len([i for i in issues_list if i["status"] in ("resolved", "closed")])
+
+    subtask_counts = subtask_service.get_counts(project_name)
 
     return {
         "todo": {
@@ -827,6 +829,7 @@ def get_project_summary(project_name: str):
             "open": open_issues,
             "resolved": resolved_issues,
         },
+        "subtasks": subtask_counts,
         "schedule": {"total": 0, "upcoming": 0, "overdue": 0},  # Placeholder
     }
 
@@ -929,6 +932,74 @@ def delete_issue_comment(project_name: str, issue_id: str, comment_id: str):
     if issue is None:
         raise HTTPException(status_code=404, detail="Comment not found")
     return issue
+
+
+# --- Subtask endpoints ---
+
+class SubtaskCreateRequest(BaseModel):
+    title: str
+    description: str = ""
+
+
+class SubtaskUpdateRequest(BaseModel):
+    title: str | None = None
+    description: str | None = None
+
+
+class SubtaskToggleRequest(BaseModel):
+    status: str  # "pending" | "done" | "cancelled"
+
+
+class SubtaskReorderRequest(BaseModel):
+    ordered_ids: list[str]
+
+
+@app.get("/api/projects/{project_name}/subtasks")
+def list_subtasks(project_name: str):
+    """List all subtasks for a project."""
+    return subtask_service.list_subtasks(project_name)
+
+
+@app.post("/api/projects/{project_name}/subtasks")
+def create_subtask(project_name: str, body: SubtaskCreateRequest):
+    """Create a new subtask."""
+    subtask = subtask_service.create_subtask(project_name, body.title, body.description)
+    return subtask
+
+
+@app.put("/api/projects/{project_name}/subtasks/{subtask_id}")
+def update_subtask(project_name: str, subtask_id: str, body: SubtaskUpdateRequest):
+    """Update a subtask's title/description."""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    subtask = subtask_service.update_subtask(project_name, subtask_id, updates)
+    if subtask is None:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    return subtask
+
+
+@app.delete("/api/projects/{project_name}/subtasks/{subtask_id}")
+def delete_subtask(project_name: str, subtask_id: str):
+    """Delete a subtask."""
+    success = subtask_service.delete_subtask(project_name, subtask_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    return {"success": True}
+
+
+@app.put("/api/projects/{project_name}/subtasks/{subtask_id}/toggle")
+def toggle_subtask(project_name: str, subtask_id: str, body: SubtaskToggleRequest):
+    """Toggle subtask status (pending/done/cancelled)."""
+    subtask = subtask_service.toggle_subtask(project_name, subtask_id, body.status)
+    if subtask is None:
+        raise HTTPException(status_code=404, detail="Subtask not found or invalid status")
+    return subtask
+
+
+@app.put("/api/projects/{project_name}/subtasks/reorder")
+def reorder_subtasks(project_name: str, body: SubtaskReorderRequest):
+    """Reorder subtasks based on ID list."""
+    data = subtask_service.reorder_subtasks(project_name, body.ordered_ids)
+    return data
 
 
 # --- People endpoints ---

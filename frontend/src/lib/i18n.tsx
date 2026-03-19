@@ -136,6 +136,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "issues.assignee": "담당자",
     "issues.status": "상태",
 
+    // Subtasks
+    "subtask.subtasks": "하위 작업",
+    "subtask.addSubtask": "하위 작업 추가",
+    "subtask.pending": "대기",
+    "subtask.done": "완료",
+    "subtask.cancelled": "취소",
+    "subtask.title": "작업명",
+    "subtask.description": "설명",
+    "subtask.deleteConfirm": "이 하위 작업을 삭제하시겠습니까?",
+    "subtask.noSubtasks": "하위 작업 없음",
+
     // Ideas page
     "ideas.inPipeline": "아이디어 파이프라인",
     "ideas.search": "아이디어 검색",
@@ -437,6 +448,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "issues.priority": "Priority",
     "issues.assignee": "Assignee",
     "issues.status": "Status",
+
+    // Subtasks
+    "subtask.subtasks": "Subtasks",
+    "subtask.addSubtask": "Add Subtask",
+    "subtask.pending": "Pending",
+    "subtask.done": "Done",
+    "subtask.cancelled": "Cancelled",
+    "subtask.title": "Title",
+    "subtask.description": "Description",
+    "subtask.deleteConfirm": "Delete this subtask?",
+    "subtask.noSubtasks": "No subtasks",
 
     // Ideas page
     "ideas.inPipeline": "ideas in pipeline",

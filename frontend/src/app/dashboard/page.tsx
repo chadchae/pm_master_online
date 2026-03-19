@@ -29,7 +29,15 @@ export default function DashboardPage() {
   } | null>(null);
   const [cardOrder, setCardOrder] = useState<Record<string, string[]>>({});
   const [dragOverCard, setDragOverCard] = useState<string | null>(null);
-  const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
+  const [typeFilters, setTypeFilters] = useState<Set<string>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("pm_typeFilters");
+      if (saved) {
+        try { return new Set(JSON.parse(saved)); } catch {}
+      }
+    }
+    return new Set();
+  });
   const [sortKey, setSortKey] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showNewProject, setShowNewProject] = useState(false);
@@ -56,23 +64,19 @@ export default function DashboardPage() {
     }
   };
 
+  // Persist type filters to localStorage
+  useEffect(() => {
+    localStorage.setItem("pm_typeFilters", JSON.stringify([...typeFilters]));
+  }, [typeFilters]);
+
   // Fixed type order and normalization
-  const TYPE_ORDER = ["개인", "연구", "개발", "기타"];
-  const allTypesSet = new Set(
-    projects
-      .filter((p) => p.stage !== "1_idea_stage")
-      .map((p) => p.metadata?.["유형"] || "")
-      .filter(Boolean)
-  );
-  const normalizeType = (t: string) => {
-    if (TYPE_ORDER.slice(0, 3).includes(t)) return t;
+  const TYPE_ORDER = ["개인", "연구", "개발", "기타"] as const;
+  const normalizeType = (t: string): string => {
+    if (!t) return "기타";
+    if (t === "개인" || t === "연구" || t === "개발") return t;
     if (t.includes("연구") && t.includes("개발")) return "연구";
     return "기타";
   };
-  const allTypes = TYPE_ORDER.filter((t) => {
-    if (t === "기타") return [...allTypesSet].some((ut) => normalizeType(ut) === "기타");
-    return [...allTypesSet].some((ut) => normalizeType(ut) === t);
-  });
 
   // Filter out idea-stage projects for kanban (ideas have their own page)
   const kanbanProjects = projects.filter((p) => {
@@ -202,6 +206,9 @@ export default function DashboardPage() {
       case "name": va = (a.metadata?.label || a.name).toLowerCase(); vb = (b.metadata?.label || b.name).toLowerCase(); break;
       case "stage": va = a.stage; vb = b.stage; break;
       case "type": va = a.metadata?.유형 || ""; vb = b.metadata?.유형 || ""; break;
+      case "importance": va = a.metadata?.["중요도"] || "0"; vb = b.metadata?.["중요도"] || "0"; break;
+      case "severity": va = a.metadata?.["위급도"] || ""; vb = b.metadata?.["위급도"] || ""; break;
+      case "urgency": va = a.metadata?.["긴급도"] || ""; vb = b.metadata?.["긴급도"] || ""; break;
       case "created": va = a.metadata?.작성일 || ""; vb = b.metadata?.작성일 || ""; break;
     }
     const cmp = va.localeCompare(vb);
@@ -259,9 +266,9 @@ export default function DashboardPage() {
                     "개발": "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
                     "기타": "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
                   };
-                  return TYPE_ORDER.filter((t) => counts[t]).map((t) => (
+                  return TYPE_ORDER.map((t) => (
                     <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${colorMap[t]}`}>
-                      {t} {counts[t]}
+                      {t} {counts[t] || 0}
                     </span>
                   ));
                 })()}
@@ -319,10 +326,9 @@ export default function DashboardPage() {
               {t("projects.newProject")}
             </button>
           </div>
-          {/* Type filter checkboxes */}
-          {allTypes.length > 0 && (
-            <div className="flex items-center gap-2 mr-3">
-              {allTypes.map((type) => (
+          {/* Type filter checkboxes — always show all 4 */}
+          <div className="flex items-center gap-2 mr-3">
+              {TYPE_ORDER.map((type) => (
                 <label key={type} className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -347,8 +353,7 @@ export default function DashboardPage() {
                   ×
                 </button>
               )}
-            </div>
-          )}
+          </div>
           <div className="flex items-center bg-neutral-100 dark:bg-neutral-800 rounded-lg p-0.5">
             <button
               onClick={() => setViewMode("kanban")}
@@ -557,7 +562,24 @@ export default function DashboardPage() {
                       {sortKey === "type" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("dashboard.tags")}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("importance")}>
+                    <span className="inline-flex items-center gap-1">
+                      Imp
+                      {sortKey === "importance" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("severity")}>
+                    <span className="inline-flex items-center gap-1">
+                      Sev
+                      {sortKey === "severity" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("urgency")}>
+                    <span className="inline-flex items-center gap-1">
+                      Urg
+                      {sortKey === "urgency" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider w-32">{t("dashboard.progress")}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("created")}>
                     <span className="inline-flex items-center gap-1">
@@ -599,8 +621,14 @@ export default function DashboardPage() {
                       <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
                         {project.metadata?.유형 || "-"}
                       </td>
-                      <td className="px-4 py-3">
-                        <MetaTags metadata={project.metadata} compact />
+                      <td className="px-4 py-3 text-xs">
+                        {(() => { const v = parseInt(project.metadata?.["중요도"] || "0"); return v > 0 ? <span className="text-amber-500">{"★".repeat(v)}</span> : <span className="text-neutral-300">-</span>; })()}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {project.metadata?.["위급도"] ? <span className={`${project.metadata["위급도"] === "critical" ? "text-red-500" : project.metadata["위급도"] === "high" ? "text-orange-500" : project.metadata["위급도"] === "medium" ? "text-yellow-500" : "text-green-500"}`}>{project.metadata["위급도"]}</span> : <span className="text-neutral-300">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {project.metadata?.["긴급도"] ? <span className={`${project.metadata["긴급도"] === "urgent" ? "text-red-500" : project.metadata["긴급도"] === "high" ? "text-orange-500" : project.metadata["긴급도"] === "medium" ? "text-yellow-500" : "text-green-500"}`}>{project.metadata["긴급도"]}</span> : <span className="text-neutral-300">-</span>}
                       </td>
                       <td className="px-4 py-3">
                         <ProgressBar metadata={project.metadata} compact />

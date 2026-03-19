@@ -176,6 +176,9 @@ export default function IdeasPage() {
     switch (sortKey) {
       case "name": va = (a.metadata?.label || a.name).toLowerCase(); vb = (b.metadata?.label || b.name).toLowerCase(); break;
       case "type": va = a.metadata?.["유형"] || ""; vb = b.metadata?.["유형"] || ""; break;
+      case "importance": va = a.metadata?.["중요도"] || "0"; vb = b.metadata?.["중요도"] || "0"; break;
+      case "severity": va = a.metadata?.["위급도"] || ""; vb = b.metadata?.["위급도"] || ""; break;
+      case "urgency": va = a.metadata?.["긴급도"] || ""; vb = b.metadata?.["긴급도"] || ""; break;
       case "created": va = a.metadata?.["작성일"] || ""; vb = b.metadata?.["작성일"] || ""; break;
     }
     const cmp = va.localeCompare(vb);
@@ -414,7 +417,24 @@ export default function IdeasPage() {
                     {sortKey === "type" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                   </span>
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Tags</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("importance")}>
+                  <span className="inline-flex items-center gap-1">
+                    Imp
+                    {sortKey === "importance" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                  </span>
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("severity")}>
+                  <span className="inline-flex items-center gap-1">
+                    Sev
+                    {sortKey === "severity" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                  </span>
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("urgency")}>
+                  <span className="inline-flex items-center gap-1">
+                    Urg
+                    {sortKey === "urgency" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                  </span>
+                </th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("created")}>
                   <span className="inline-flex items-center gap-1">
                     Created
@@ -454,8 +474,14 @@ export default function IdeasPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    <MetaTags metadata={idea.metadata} compact />
+                  <td className="px-4 py-3 text-xs">
+                    {(() => { const v = parseInt(idea.metadata?.["중요도"] || "0"); return v > 0 ? <span className="text-amber-500">{"★".repeat(v)}</span> : <span className="text-neutral-300">-</span>; })()}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {idea.metadata?.["위급도"] ? <span className={`${idea.metadata["위급도"] === "critical" ? "text-red-500" : idea.metadata["위급도"] === "high" ? "text-orange-500" : idea.metadata["위급도"] === "medium" ? "text-yellow-500" : "text-green-500"}`}>{idea.metadata["위급도"]}</span> : <span className="text-neutral-300">-</span>}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {idea.metadata?.["긴급도"] ? <span className={`${idea.metadata["긴급도"] === "urgent" ? "text-red-500" : idea.metadata["긴급도"] === "high" ? "text-orange-500" : idea.metadata["긴급도"] === "medium" ? "text-yellow-500" : "text-green-500"}`}>{idea.metadata["긴급도"]}</span> : <span className="text-neutral-300">-</span>}
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs text-neutral-500 dark:text-neutral-400">

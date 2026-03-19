@@ -4,11 +4,11 @@ import { useEffect, useState, DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, Project, ServerStatus } from "@/lib/api";
 import { STAGES, KANBAN_STAGES, getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
-import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock, Pencil, Trash2, Download, Plus } from "lucide-react";
+import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock, Pencil, Trash2, Download, Plus, X } from "lucide-react";
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
-import { ConfirmDialog, NewProjectDialog } from "@/components/AppDialogs";
+import { ConfirmDialog, PromptDialog, NewProjectDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
 import toast from "react-hot-toast";
 
@@ -108,6 +108,7 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showNewProject, setShowNewProject] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [promptDialog, setPromptDialog] = useState<{ title: string; defaultValue?: string; onConfirm: (val: string) => void } | null>(null);
   const [isDark, setIsDark] = useState(false);
   const [lightTheme, setLightTheme] = useState<ThemeKey>(() => {
     if (typeof window !== "undefined") {
@@ -423,25 +424,86 @@ export default function DashboardPage() {
               {t("projects.newProject")}
             </button>
           </div>
-          {/* Type filter checkboxes — always show all 4 */}
+          {/* Type filter checkboxes — always show all 4 + management */}
           <div className="flex items-center gap-2 mr-3">
-              {TYPE_ORDER.map((type) => (
-                <label key={type} className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={typeFilters.has(type)}
-                    onChange={() => {
-                      setTypeFilters((prev) => {
-                        const next = new Set(prev);
-                        next.has(type) ? next.delete(type) : next.add(type);
-                        return next;
-                      });
-                    }}
-                    className="w-3.5 h-3.5 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  {type}
-                </label>
-              ))}
+              {TYPE_ORDER.map((type) => {
+                // Collect actual type names that map to this normalized type
+                const actualTypes = [...new Set(
+                  projects
+                    .filter((p) => p.stage !== "1_idea_stage")
+                    .map((p) => p.metadata?.["유형"] || "")
+                    .filter((t) => normalizeType(t) === type && t !== "")
+                )];
+                return (
+                  <span key={type} className="inline-flex items-center gap-1">
+                    <label className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={typeFilters.has(type)}
+                        onChange={() => {
+                          setTypeFilters((prev) => {
+                            const next = new Set(prev);
+                            next.has(type) ? next.delete(type) : next.add(type);
+                            return next;
+                          });
+                        }}
+                        className="w-3.5 h-3.5 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      {type}
+                    </label>
+                    {type !== "기타" && actualTypes.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => {
+                            const targetType = actualTypes.length === 1 ? actualTypes[0] : type;
+                            setPromptDialog({
+                              title: `Rename Type "${targetType}"`,
+                              defaultValue: targetType,
+                              onConfirm: async (newName) => {
+                                setPromptDialog(null);
+                                if (newName.trim() && newName.trim() !== targetType) {
+                                  try {
+                                    await apiFetch("/api/projects/rename-type", {
+                                      method: "PUT",
+                                      body: JSON.stringify({ old_type: targetType, new_type: newName.trim() }),
+                                    });
+                                    loadData();
+                                    toast.success(`Renamed "${targetType}" → "${newName.trim()}"`);
+                                  } catch { toast.error("Failed to rename"); }
+                                }
+                              },
+                            });
+                          }}
+                          className="text-neutral-400 hover:text-indigo-500 transition-colors"
+                          title={`Rename ${type}`}
+                        >
+                          <Pencil className="w-2.5 h-2.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            const targetType = actualTypes.length === 1 ? actualTypes[0] : type;
+                            setConfirmDialog({
+                              message: `Delete type "${targetType}" from all projects?`,
+                              onConfirm: async () => {
+                                setConfirmDialog(null);
+                                try {
+                                  await apiFetch(`/api/projects/delete-type/${encodeURIComponent(targetType)}`, { method: "DELETE" });
+                                  loadData();
+                                  toast.success(`Deleted type "${targetType}"`);
+                                } catch { toast.error("Failed to delete"); }
+                              },
+                            });
+                          }}
+                          className="text-neutral-400 hover:text-red-500 transition-colors"
+                          title={`Delete ${type}`}
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </>
+                    )}
+                  </span>
+                );
+              })}
               {typeFilters.size > 0 && (
                 <button
                   onClick={() => setTypeFilters(new Set())}
@@ -807,6 +869,13 @@ export default function DashboardPage() {
         confirmLabel="Delete"
         onConfirm={() => { confirmDialog?.onConfirm(); }}
         onCancel={() => setConfirmDialog(null)}
+      />
+      <PromptDialog
+        open={!!promptDialog}
+        title={promptDialog?.title || ""}
+        defaultValue={promptDialog?.defaultValue || ""}
+        onConfirm={(val) => { promptDialog?.onConfirm(val); }}
+        onCancel={() => setPromptDialog(null)}
       />
     </div>
   );

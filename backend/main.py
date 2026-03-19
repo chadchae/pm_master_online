@@ -166,6 +166,25 @@ def update_metadata(project_name: str, body: UpdateMetadataRequest):
     return result
 
 
+class RenameTypeRequest(BaseModel):
+    old_type: str
+    new_type: str
+
+
+@app.put("/api/projects/rename-type")
+def rename_project_type(body: RenameTypeRequest):
+    """Rename a project type across all projects."""
+    count = scanner_service.rename_type_all(body.old_type, body.new_type)
+    return {"success": True, "updated": count}
+
+
+@app.delete("/api/projects/delete-type/{type_name}")
+def delete_project_type(type_name: str):
+    """Clear a project type from all projects."""
+    count = scanner_service.delete_type_all(type_name)
+    return {"success": True, "updated": count}
+
+
 class UpdateDescriptionRequest(BaseModel):
     description: str
 

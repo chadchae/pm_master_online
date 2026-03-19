@@ -389,6 +389,30 @@ def update_metadata(project_name: str, updates: dict[str, str]) -> dict[str, Any
         return {"success": False, "message": f"Failed to update: {e}"}
 
 
+def rename_type_all(old_type: str, new_type: str) -> int:
+    """Rename a project type across all projects. Returns count of updated projects."""
+    projects = scan_projects()
+    count = 0
+    for proj in projects:
+        if proj.get("metadata", {}).get("유형") == old_type:
+            result = update_metadata(proj["name"], {"유형": new_type})
+            if result.get("success"):
+                count += 1
+    return count
+
+
+def delete_type_all(type_name: str) -> int:
+    """Clear a project type from all projects. Returns count of updated projects."""
+    projects = scan_projects()
+    count = 0
+    for proj in projects:
+        if proj.get("metadata", {}).get("유형") == type_name:
+            result = update_metadata(proj["name"], {"유형": ""})
+            if result.get("success"):
+                count += 1
+    return count
+
+
 def _build_yaml_frontmatter(metadata: dict[str, Any]) -> str:
     """Build YAML frontmatter string from metadata dict."""
     if not metadata:

@@ -392,7 +392,12 @@ export default function ProjectDetailPage() {
   const [newMsDate, setNewMsDate] = useState("");
   const [newMsDesc, setNewMsDesc] = useState("");
   const [newMsLinked, setNewMsLinked] = useState<string[]>([]);
-
+  // Milestone edit state
+  const [editingMsId, setEditingMsId] = useState<string | null>(null);
+  const [editMsTitle, setEditMsTitle] = useState("");
+  const [editMsDate, setEditMsDate] = useState("");
+  const [editMsDesc, setEditMsDesc] = useState("");
+  const [editMsLinked, setEditMsLinked] = useState<string[]>([]);
 
   const loadSchedule = async () => {
     try {
@@ -493,6 +498,33 @@ export default function ProjectDetailPage() {
       loadSchedule();
     } catch {
       toast.error(t("toast.failedToDelete"));
+    }
+  };
+
+  const startEditMilestone = (ms: Milestone) => {
+    setEditingMsId(ms.id);
+    setEditMsTitle(ms.title);
+    setEditMsDate(ms.date);
+    setEditMsDesc(ms.description || "");
+    setEditMsLinked(ms.linked_tasks || []);
+  };
+
+  const saveEditMilestone = async () => {
+    if (!editingMsId || !editMsTitle.trim()) return;
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/milestones/${editingMsId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: editMsTitle.trim(),
+          date: editMsDate,
+          description: editMsDesc.trim(),
+          linked_tasks: editMsLinked,
+        }),
+      });
+      setEditingMsId(null);
+      loadSchedule();
+    } catch {
+      toast.error(t("toast.failedToSave"));
     }
   };
 
@@ -2516,13 +2548,43 @@ export default function ProjectDetailPage() {
                         <span className="text-neutral-400 dark:text-neutral-500 ml-1">— {ms.description}</span>
                       )}
                       <button
+                        onClick={() => startEditMilestone(ms)}
+                        className="text-neutral-400 hover:text-indigo-500 ml-1"
+                        title={t("action.edit")}
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
                         onClick={() => deleteMilestone(ms.id)}
-                        className="text-neutral-400 hover:text-red-500 ml-1"
+                        className="text-neutral-400 hover:text-red-500"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     </span>
                   ))}
+                </div>
+              )}
+              {/* Edit Milestone Form */}
+              {editingMsId && (
+                <div className="px-4 py-3 bg-amber-50/50 dark:bg-amber-950/10 border-b border-amber-200 dark:border-amber-800 space-y-3">
+                  <h4 className="text-xs font-semibold text-amber-700 dark:text-amber-400">Edit Milestone</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <input value={editMsTitle} onChange={(e) => setEditMsTitle(e.target.value)} placeholder={t("schedule.milestone")} className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                    <input type="date" value={editMsDate} onChange={(e) => setEditMsDate(e.target.value)} className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                    <input value={editMsDesc} onChange={(e) => setEditMsDesc(e.target.value)} placeholder={t("schedule.description")} className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-neutral-500 dark:text-neutral-400 mb-1 block">{t("schedule.dependencies")}</label>
+                    <div className="flex flex-wrap gap-1">
+                      {scheduleTasks.map((st) => (
+                        <button key={st.id} onClick={() => setEditMsLinked((prev) => prev.includes(st.id) ? prev.filter((d) => d !== st.id) : [...prev, st.id])} className={`px-2 py-0.5 text-xs rounded-full border ${editMsLinked.includes(st.id) ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300" : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400"}`}>{st.title}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={saveEditMilestone} className="px-4 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700">{t("action.save")}</button>
+                    <button onClick={() => setEditingMsId(null)} className="px-4 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800">{t("action.cancel")}</button>
+                  </div>
                 </div>
               )}
               <div className="overflow-x-auto">
@@ -2746,18 +2808,21 @@ export default function ProjectDetailPage() {
               }
               // Uncategorized tasks under "General"
               if (catMap[""] && catMap[""].length > 0) {
-                const alreadyInGeneral = catGroupOrder.includes("General") ? [] : catMap[""];
-                if (alreadyInGeneral.length > 0) {
+                if (!catGroupOrder.includes("General")) {
+                  // No General category exists — create one
                   ganttRows.push({ type: "category", name: t("schedule.general"), color: "#6b7280" });
-                  for (const task of alreadyInGeneral) ganttRows.push({ type: "task", task });
+                  for (const task of catMap[""]) ganttRows.push({ type: "task", task });
                 } else {
-                  // Merge uncategorized into General group
+                  // Merge uncategorized into General group, sorted by start_date
                   const generalIdx = ganttRows.findIndex((r) => r.type === "category" && r.name === "General");
                   if (generalIdx >= 0) {
-                    // Find insertion point: after last task in General group
-                    let insertIdx = generalIdx + 1;
-                    while (insertIdx < ganttRows.length && ganttRows[insertIdx].type === "task") insertIdx++;
-                    for (const task of catMap[""]) ganttRows.splice(insertIdx++, 0, { type: "task", task });
+                    // Collect all General tasks + uncategorized, re-sort by start_date
+                    let endIdx = generalIdx + 1;
+                    while (endIdx < ganttRows.length && ganttRows[endIdx].type === "task") endIdx++;
+                    const existingTasks = ganttRows.slice(generalIdx + 1, endIdx).map((r) => (r as { type: "task"; task: ScheduleTask }).task);
+                    const allGeneralTasks = [...existingTasks, ...catMap[""]].sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
+                    // Replace existing tasks with sorted combined list
+                    ganttRows.splice(generalIdx + 1, endIdx - generalIdx - 1, ...allGeneralTasks.map((task) => ({ type: "task" as const, task })));
                   }
                 }
               }
@@ -2800,7 +2865,10 @@ export default function ProjectDetailPage() {
                           {ms.description && (
                             <span className="text-neutral-400 dark:text-neutral-500 ml-1">— {ms.description}</span>
                           )}
-                          <button onClick={() => deleteMilestone(ms.id)} className="text-neutral-400 hover:text-red-500 ml-1">
+                          <button onClick={() => startEditMilestone(ms)} className="text-neutral-400 hover:text-indigo-500 ml-1" title={t("action.edit")}>
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => deleteMilestone(ms.id)} className="text-neutral-400 hover:text-red-500">
                             <X className="w-3 h-3" />
                           </button>
                         </span>

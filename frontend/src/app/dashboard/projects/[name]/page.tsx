@@ -2976,14 +2976,15 @@ export default function ProjectDetailPage() {
                                     />
                                   )
                               )}
-                              {/* Today line */}
+                              {/* Today line — z-20 to render in front of task bars */}
                               {todayOffset >= 0 && todayOffset < totalDays && (
                                 <div
-                                  className="absolute top-0 w-px bg-red-500 z-10"
+                                  className="absolute top-0 z-20 pointer-events-none"
                                   style={{
                                     left: todayOffset * dayWidth + dayWidth / 2,
                                     height: totalChartHeight,
-                                    borderLeft: "1px dashed rgb(239 68 68)",
+                                    width: 2,
+                                    backgroundColor: "rgb(239 68 68)",
                                   }}
                                 />
                               )}

@@ -392,7 +392,7 @@ export default function DashboardPage() {
                   className={`flex flex-col rounded-xl border transition-colors ${
                     isDragOver
                       ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30"
-                      : "border-neutral-300 dark:border-neutral-800 bg-white dark:bg-neutral-900"
+                      : "border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900"
                   }`}
                   onDragOver={(e) => handleDragOver(e, stage.folder)}
                   onDragLeave={handleDragLeave}
@@ -440,10 +440,10 @@ export default function DashboardPage() {
                         onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`)}
                         className={`group p-2.5 rounded-lg border transition-all hover:shadow-sm cursor-pointer ${
                           draggedProject?.name === project.name
-                            ? "opacity-50 border-neutral-300 dark:border-neutral-800"
+                            ? "opacity-50 border-neutral-300 dark:border-neutral-600"
                             : dragOverCard === project.name && draggedProject?.stage === stage.folder
                             ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20"
-                            : "border-neutral-300 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-indigo-300 dark:hover:border-indigo-700"
+                            : "border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 hover:border-indigo-300 dark:hover:border-indigo-700"
                         }`}
                       >
                         <div className="flex items-start gap-1.5">

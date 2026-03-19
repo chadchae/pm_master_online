@@ -2915,7 +2915,7 @@ export default function ProjectDetailPage() {
                       ref={(el) => {
                         // Auto-scroll to today
                         if (el && todayOffset > 0) {
-                          const scrollTo = todayOffset * dayWidth - el.clientWidth / 2;
+                          const scrollTo = todayOffset * dayWidth;
                           el.scrollLeft = Math.max(0, scrollTo);
                         }
                       }}

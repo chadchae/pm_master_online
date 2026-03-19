@@ -910,7 +910,7 @@ export default function ProjectDetailPage() {
           {/* Action buttons */}
           <div className="flex items-center gap-1 mb-2 ml-4">
             <button
-              onClick={() => window.open(`/api/projects/${encodeURIComponent(name)}/download`, "_blank")}
+              onClick={() => { const tk = localStorage.getItem("pm_token") || ""; window.open(`/api/projects/${encodeURIComponent(name)}/download?token=${tk}`, "_blank"); }}
               className="p-1.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 text-neutral-400 hover:text-blue-500 transition-colors"
               title={t("action.download")}
             >

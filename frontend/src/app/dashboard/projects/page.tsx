@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, Project } from "@/lib/api";
 import { getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
-import { Loader2, Search, FolderOpen, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, Search, FolderOpen, ArrowUpDown, ArrowUp, ArrowDown, Plus } from "lucide-react";
 import { MetaTags } from "@/components/MetaTags";
 import { useLocale } from "@/lib/i18n";
+import toast from "react-hot-toast";
 
 type SortKey = "name" | "stage" | "type" | "port" | "modified";
 type SortDir = "asc" | "desc";
@@ -97,7 +98,28 @@ export default function ProjectsPage() {
             className="w-full pl-10 pr-4 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
-        <span className="text-xs text-neutral-400">{filtered.length} projects</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-neutral-400">{filtered.length} projects</span>
+          <button
+            onClick={() => {
+              const folder = prompt(t("ideas.folderName"));
+              if (!folder?.trim()) return;
+              const label = prompt(t("ideas.displayName")) || folder;
+              apiFetch("/api/projects/create", {
+                method: "POST",
+                body: JSON.stringify({
+                  folder_name: folder.trim().toLowerCase().replace(/\s+/g, "-"),
+                  label,
+                  stage: "2_initiation_stage",
+                }),
+              }).then(() => { window.location.reload(); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
+            }}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {t("projects.newProject")}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">

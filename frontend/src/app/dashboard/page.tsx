@@ -4,7 +4,7 @@ import { useEffect, useState, DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, Project, ServerStatus } from "@/lib/api";
 import { STAGES, KANBAN_STAGES, getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
-import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock, Pencil, Trash2, Download } from "lucide-react";
+import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock, Pencil, Trash2, Download, Plus } from "lucide-react";
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
@@ -230,9 +230,30 @@ export default function DashboardPage() {
       {/* Project Board Header */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
-            {t("dashboard.projectBoard")}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
+              {t("dashboard.projectBoard")}
+            </h2>
+            <button
+              onClick={() => {
+                const folder = prompt(t("ideas.folderName"));
+                if (!folder?.trim()) return;
+                const label = prompt(t("ideas.displayName")) || folder;
+                apiFetch("/api/projects/create", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    folder_name: folder.trim().toLowerCase().replace(/\s+/g, "-"),
+                    label,
+                    stage: "2_initiation_stage",
+                  }),
+                }).then(() => { loadData(); toast.success(`Created "${label}"`); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              {t("projects.newProject")}
+            </button>
+          </div>
           <div className="flex items-center bg-neutral-100 dark:bg-neutral-800 rounded-lg p-0.5">
             <button
               onClick={() => setViewMode("kanban")}
@@ -371,7 +392,8 @@ export default function DashboardPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(`/api/projects/${encodeURIComponent(project.name)}/download`, "_blank");
+                              const tk = localStorage.getItem("pm_token") || "";
+                              window.open(`/api/projects/${encodeURIComponent(project.name)}/download?token=${tk}`, "_blank");
                             }}
                             className="p-1 text-neutral-400 hover:text-blue-500 rounded" title={t("action.download")}
                           >

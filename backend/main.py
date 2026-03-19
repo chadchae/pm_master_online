@@ -49,15 +49,19 @@ async def auth_middleware(request: Request, call_next):
     if not path.startswith("/api/"):
         return await call_next(request)
 
-    # Check authorization header
+    # Check authorization header or query token (for downloads)
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    elif "token" in request.query_params:
+        token = request.query_params["token"]
+
+    if not token:
         return JSONResponse(
             status_code=401,
             content={"detail": "Missing or invalid authorization header"},
         )
-
-    token = auth_header[7:]  # Strip "Bearer "
     if not auth_service.verify_token(token):
         return JSONResponse(
             status_code=401,

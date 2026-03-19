@@ -12,6 +12,42 @@ import { ConfirmDialog, NewProjectDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
 import toast from "react-hot-toast";
 
+const DASH_THEMES = {
+  A: { // Elevated Card
+    label: "A",
+    column: "bg-neutral-100 dark:bg-neutral-800/50",
+    columnBorder: "border-neutral-300 dark:border-neutral-700",
+    card: "bg-white dark:bg-neutral-800",
+    cardBorder: "border-neutral-200 dark:border-neutral-600",
+    cardHover: "hover:border-indigo-300 dark:hover:border-indigo-600",
+  },
+  B: { // Sunken Background
+    label: "B",
+    column: "bg-neutral-200/50 dark:bg-black/40",
+    columnBorder: "border-neutral-300 dark:border-neutral-700",
+    card: "bg-white dark:bg-neutral-900",
+    cardBorder: "border-neutral-300 dark:border-neutral-600",
+    cardHover: "hover:border-indigo-300 dark:hover:border-indigo-600",
+  },
+  C: { // Warm Neutral
+    label: "C",
+    column: "bg-stone-50 dark:bg-zinc-900/60",
+    columnBorder: "border-stone-300 dark:border-zinc-600",
+    card: "bg-white dark:bg-zinc-800",
+    cardBorder: "border-stone-200 dark:border-zinc-600",
+    cardHover: "hover:border-indigo-300 dark:hover:border-indigo-600",
+  },
+  D: { // Subtle Tint (Indigo)
+    label: "D",
+    column: "bg-slate-50 dark:bg-slate-900/50",
+    columnBorder: "border-slate-200 dark:border-slate-600",
+    card: "bg-white dark:bg-slate-800",
+    cardBorder: "border-slate-200 dark:border-slate-500",
+    cardHover: "hover:border-indigo-300 dark:hover:border-indigo-500",
+  },
+} as const;
+type DashThemeKey = keyof typeof DASH_THEMES;
+
 export default function DashboardPage() {
   const router = useRouter();
   const { t } = useLocale();
@@ -42,6 +78,17 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showNewProject, setShowNewProject] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [dashTheme, setDashTheme] = useState<DashThemeKey>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("pm_dashTheme");
+      if (saved && saved in DASH_THEMES) return saved as DashThemeKey;
+    }
+    return "A";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("pm_dashTheme", dashTheme);
+  }, [dashTheme]);
 
   useEffect(() => {
     loadData();
@@ -215,6 +262,8 @@ export default function DashboardPage() {
     return sortDir === "asc" ? cmp : -cmp;
   });
 
+  const theme = DASH_THEMES[dashTheme];
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -378,6 +427,22 @@ export default function DashboardPage() {
               {t("dashboard.list")}
             </button>
           </div>
+          <div className="flex items-center gap-1 ml-2">
+            {(Object.keys(DASH_THEMES) as DashThemeKey[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => setDashTheme(key)}
+                className={`w-6 h-6 rounded-full text-[10px] font-bold transition-colors ${
+                  dashTheme === key
+                    ? "bg-indigo-600 text-white"
+                    : "bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+                }`}
+                title={`Theme ${key}`}
+              >
+                {key}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Kanban View */}
@@ -392,13 +457,13 @@ export default function DashboardPage() {
                   className={`flex flex-col rounded-xl border transition-colors ${
                     isDragOver
                       ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30"
-                      : "border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900/60"
+                      : `${theme.columnBorder} ${theme.column}`
                   }`}
                   onDragOver={(e) => handleDragOver(e, stage.folder)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, stage.folder)}
                 >
-                  <div className="px-3 py-2.5 border-b border-neutral-200 dark:border-neutral-800">
+                  <div className={`px-3 py-2.5 border-b ${theme.cardBorder}`}>
                     <div className="flex items-center justify-between">
                       <div>
                         <span className={`text-xs font-semibold uppercase tracking-wider ${stage.textColor}`}>
@@ -440,10 +505,10 @@ export default function DashboardPage() {
                         onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`)}
                         className={`group p-2.5 rounded-lg border transition-all hover:shadow-sm cursor-pointer ${
                           draggedProject?.name === project.name
-                            ? "opacity-50 border-neutral-300 dark:border-neutral-600"
+                            ? `opacity-50 ${theme.cardBorder}`
                             : dragOverCard === project.name && draggedProject?.stage === stage.folder
                             ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20"
-                            : "border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 hover:border-indigo-300 dark:hover:border-indigo-700"
+                            : `${theme.cardBorder} ${theme.card} ${theme.cardHover}`
                         }`}
                       >
                         <div className="flex items-start gap-1.5">
@@ -498,7 +563,7 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         {/* Action buttons */}
-                        <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-neutral-200 dark:border-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className={`flex items-center gap-1 mt-2 pt-1.5 border-t ${theme.cardBorder} opacity-0 group-hover:opacity-100 transition-opacity`}>
                           <button
                             onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`); }}
                             className="p-1 text-neutral-400 hover:text-indigo-500 rounded" title={t("action.edit")}
@@ -548,7 +613,7 @@ export default function DashboardPage() {
 
         {/* List View */}
         {viewMode === "list" && (
-          <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+          <div className={`${theme.card} rounded-xl border ${theme.cardBorder} overflow-hidden`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50">

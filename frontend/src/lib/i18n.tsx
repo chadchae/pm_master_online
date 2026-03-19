@@ -113,6 +113,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "todo.medium": "보통",
     "todo.high": "높음",
     "todo.noTasks": "작업 없음",
+    "todo.assignee": "담당자",
+    "todo.dueDate": "마감일",
 
     // Ideas page
     "ideas.inPipeline": "아이디어 파이프라인",
@@ -385,6 +387,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "todo.medium": "Medium",
     "todo.high": "High",
     "todo.noTasks": "No tasks",
+    "todo.assignee": "Assignee",
+    "todo.dueDate": "Due date",
 
     // Ideas page
     "ideas.inPipeline": "ideas in pipeline",

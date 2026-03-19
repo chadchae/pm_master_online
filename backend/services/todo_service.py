@@ -58,8 +58,10 @@ def create_todo(project_name: str, todo_data: dict[str, Any]) -> dict[str, Any]:
         "column": column,
         "priority": todo_data.get("priority", "medium"),
         "assignee": todo_data.get("assignee", ""),
+        "due_date": todo_data.get("due_date", ""),
         "created_at": today,
         "updated_at": today,
+        "completed_at": "",
         "order": max_order + 1,
     }
 
@@ -75,7 +77,7 @@ def update_todo(
     data = _load_todos(project_name)
     for item in data["items"]:
         if item["id"] == todo_id:
-            for key in ("title", "description", "priority", "assignee"):
+            for key in ("title", "description", "priority", "assignee", "due_date", "completed_at"):
                 if key in updates:
                     item[key] = updates[key]
             item["updated_at"] = str(date.today())
@@ -116,6 +118,11 @@ def move_todo(
     target["column"] = column
     target["order"] = order
     target["updated_at"] = str(date.today())
+    # Auto-set completed_at when moving to done
+    if column == "done" and not target.get("completed_at"):
+        target["completed_at"] = str(date.today())
+    elif column != "done":
+        target["completed_at"] = ""
 
     # Re-order items in the destination column
     dest_items = sorted(

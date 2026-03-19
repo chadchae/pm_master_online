@@ -774,6 +774,28 @@ def move_todo(project_name: str, todo_id: str, body: TodoMoveRequest):
     return todo
 
 
+@app.get("/api/projects/{project_name}/summary")
+def get_project_summary(project_name: str):
+    """Get todo/issues/schedule summary for project header widget."""
+    todo_data = todo_service.list_todos(project_name)
+    items = todo_data.get("items", [])
+    todo_count = len([i for i in items if i["column"] == "todo"])
+    progress_count = len([i for i in items if i["column"] == "in_progress"])
+    done_count = len([i for i in items if i["column"] == "done"])
+    total = len(items)
+    return {
+        "todo": {
+            "total": total,
+            "todo": todo_count,
+            "in_progress": progress_count,
+            "done": done_count,
+            "progress_pct": round(done_count / total * 100) if total > 0 else 0,
+        },
+        "issues": {"total": 0, "open": 0, "resolved": 0},  # Placeholder
+        "schedule": {"total": 0, "upcoming": 0, "overdue": 0},  # Placeholder
+    }
+
+
 # --- People endpoints ---
 
 class PersonCreateRequest(BaseModel):

@@ -97,21 +97,40 @@ export default function ProjectDetailPage() {
     column: string;
     priority: "low" | "medium" | "high";
     assignee: string;
+    due_date: string;
     created_at: string;
     updated_at: string;
+    completed_at: string;
     order: number;
+  }
+  interface ProjectSummary {
+    todo: { total: number; todo: number; in_progress: number; done: number; progress_pct: number };
+    issues: { total: number; open: number; resolved: number };
+    schedule: { total: number; upcoming: number; overdue: number };
   }
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [todoColumns] = useState(["todo", "in_progress", "done"]);
+  const [summary, setSummary] = useState<ProjectSummary | null>(null);
   const [addingInColumn, setAddingInColumn] = useState<string | null>(null);
   const [newTodoTitle, setNewTodoTitle] = useState("");
   const [newTodoDesc, setNewTodoDesc] = useState("");
   const [newTodoPriority, setNewTodoPriority] = useState<"low" | "medium" | "high">("medium");
+  const [newTodoAssignee, setNewTodoAssignee] = useState("");
+  const [newTodoDueDate, setNewTodoDueDate] = useState("");
   const [editingTodo, setEditingTodo] = useState<string | null>(null);
   const [editTodoTitle, setEditTodoTitle] = useState("");
   const [editTodoDesc, setEditTodoDesc] = useState("");
   const [editTodoPriority, setEditTodoPriority] = useState<"low" | "medium" | "high">("medium");
   const [draggedTodo, setDraggedTodo] = useState<string | null>(null);
+
+  const loadSummary = async () => {
+    try {
+      const res = await apiFetch<ProjectSummary>(
+        `/api/projects/${encodeURIComponent(name)}/summary`
+      );
+      setSummary(res);
+    } catch {}
+  };
 
   const loadTodos = async () => {
     try {
@@ -119,6 +138,7 @@ export default function ProjectDetailPage() {
         `/api/projects/${encodeURIComponent(name)}/todos`
       );
       setTodos(res.items || []);
+      loadSummary();
     } catch {}
   };
 
@@ -132,11 +152,15 @@ export default function ProjectDetailPage() {
           description: newTodoDesc.trim(),
           column,
           priority: newTodoPriority,
+          assignee: newTodoAssignee,
+          due_date: newTodoDueDate,
         }),
       });
       setNewTodoTitle("");
       setNewTodoDesc("");
       setNewTodoPriority("medium");
+      setNewTodoAssignee("");
+      setNewTodoDueDate("");
       setAddingInColumn(null);
       loadTodos();
     } catch {
@@ -250,6 +274,7 @@ export default function ProjectDetailPage() {
       const proj = (projectsRes.projects || []).find((p) => p.name === name);
       setProject(proj || null);
       setDocs(docsRes.docs || []);
+      loadSummary();
     } catch {
       toast.error(t("toast.failedToLoadProject"));
     } finally {
@@ -527,6 +552,38 @@ export default function ProjectDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Summary widgets (right side) */}
+          {summary && (
+            <div className="flex gap-3 ml-4 flex-shrink-0">
+              {/* Todo summary */}
+              <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 min-w-[120px] text-center">
+                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">{t("todo.title")}</p>
+                <p className="text-lg font-bold text-neutral-900 dark:text-white">{summary.todo.done}/{summary.todo.total}</p>
+                <div className="h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full mt-1.5 overflow-hidden">
+                  <div className="h-full bg-green-500 rounded-full" style={{ width: `${summary.todo.progress_pct}%` }} />
+                </div>
+                <div className="flex justify-between text-xs text-neutral-400 mt-1">
+                  <span>{summary.todo.todo} todo</span>
+                  <span>{summary.todo.in_progress} wip</span>
+                </div>
+              </div>
+
+              {/* Issues placeholder */}
+              <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 min-w-[120px] text-center opacity-50">
+                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Issues</p>
+                <p className="text-lg font-bold text-neutral-400">-</p>
+                <p className="text-xs text-neutral-400 mt-1">Coming soon</p>
+              </div>
+
+              {/* Schedule placeholder */}
+              <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 min-w-[120px] text-center opacity-50">
+                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">Schedule</p>
+                <p className="text-lg font-bold text-neutral-400">-</p>
+                <p className="text-xs text-neutral-400 mt-1">Coming soon</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -915,9 +972,24 @@ export default function ProjectDetailPage() {
                         /* Display mode */
                         <>
                           <div className="flex items-start justify-between gap-1">
-                            <p className="text-sm font-medium text-neutral-900 dark:text-white flex-1">
-                              {todo.title}
-                            </p>
+                            <div className="flex items-start gap-2 flex-1">
+                              <input
+                                type="checkbox"
+                                checked={todo.column === "done"}
+                                onChange={() => {
+                                  if (todo.column === "done") {
+                                    moveTodo(todo.id, "todo", 0);
+                                  } else {
+                                    const doneItems = todos.filter((t) => t.column === "done");
+                                    moveTodo(todo.id, "done", doneItems.length);
+                                  }
+                                }}
+                                className="mt-1 w-4 h-4 rounded border-neutral-300 text-green-600 focus:ring-green-500 flex-shrink-0 cursor-pointer"
+                              />
+                              <p className={`text-sm font-medium flex-1 ${todo.column === "done" ? "line-through text-neutral-400" : "text-neutral-900 dark:text-white"}`}>
+                                {todo.title}
+                              </p>
+                            </div>
                             <div className="flex items-center gap-0.5 flex-shrink-0">
                               <button
                                 onClick={() => {
@@ -955,6 +1027,16 @@ export default function ProjectDetailPage() {
                                 {todo.assignee}
                               </span>
                             )}
+                            {todo.due_date && (
+                              <span className="text-xs text-neutral-400 flex items-center gap-0.5">
+                                <Calendar className="w-3 h-3" />
+                                {todo.due_date}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400">
+                            <span>{todo.created_at}</span>
+                            {todo.completed_at && <span className="text-green-500">completed {todo.completed_at}</span>}
                           </div>
                         </>
                       )}
@@ -1003,6 +1085,19 @@ export default function ProjectDetailPage() {
                         <option value="medium">{t("todo.medium")}</option>
                         <option value="high">{t("todo.high")}</option>
                       </select>
+                      <input
+                        type="text"
+                        value={newTodoAssignee}
+                        onChange={(e) => setNewTodoAssignee(e.target.value)}
+                        placeholder={t("todo.assignee")}
+                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <input
+                        type="date"
+                        value={newTodoDueDate}
+                        onChange={(e) => setNewTodoDueDate(e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
                       <div className="flex gap-1">
                         <button
                           onClick={() => createTodo(col)}

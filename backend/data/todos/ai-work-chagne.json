@@ -1,0 +1,42 @@
+{
+  "columns": [
+    "todo",
+    "in_progress",
+    "done"
+  ],
+  "items": [
+    {
+      "id": "deaa2f3d-86e1-4225-bd3d-86085b7644ed",
+      "title": "기본코딩 - 메뉴얼",
+      "description": "메뉴얼리 코드 뽑기",
+      "column": "done",
+      "priority": "high",
+      "assignee": "",
+      "created_at": "2026-03-19",
+      "updated_at": "2026-03-19",
+      "order": 0
+    },
+    {
+      "id": "3182546a-a799-4cf8-896a-1776af0e42ab",
+      "title": "기본코딩 - 메뉴얼변역",
+      "description": "중국어 들어간것 한국어로 번역",
+      "column": "todo",
+      "priority": "high",
+      "assignee": "",
+      "created_at": "2026-03-19",
+      "updated_at": "2026-03-19",
+      "order": 0
+    },
+    {
+      "id": "b45e95ff-7675-44df-a451-5ad4b7fa45b8",
+      "title": "병합",
+      "description": "번역된애들 병합",
+      "column": "todo",
+      "priority": "medium",
+      "assignee": "",
+      "created_at": "2026-03-19",
+      "updated_at": "2026-03-19",
+      "order": 1
+    }
+  ]
+}

@@ -406,7 +406,7 @@ export default function IdeasPage() {
                   className="p-4 cursor-pointer"
                   onClick={() =>
                     router.push(
-                      `/dashboard/projects/${encodeURIComponent(idea.name)}`
+                      `/dashboard/projects/${encodeURIComponent(idea.name)}?from=ideas`
                     )
                   }
                 >

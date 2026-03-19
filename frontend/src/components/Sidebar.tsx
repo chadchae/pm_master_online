@@ -100,7 +100,14 @@ export function Sidebar() {
                     title={collapsed ? label : undefined}
                   >
                     <Icon className="w-5 h-5 flex-shrink-0" />
-                    {!collapsed && <span>{label}</span>}
+                    {!collapsed && (
+                      <span className="leading-tight">
+                        {label}
+                        {item.labelKey === "sidebar.projects" && (
+                          <span className="block text-[9px] text-neutral-400 leading-none">Dashboard + Ideas</span>
+                        )}
+                      </span>
+                    )}
                   </Link>
                 </li>
               );

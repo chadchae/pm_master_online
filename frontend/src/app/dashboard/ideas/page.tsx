@@ -459,10 +459,13 @@ export default function IdeasPage() {
           onPrint={() => {
             const rows = sortedFiltered.map((idea) => ({
               Project: idea.metadata?.label || idea.name,
+              Description: idea.metadata?.description || "-",
               Type: idea.metadata?.["유형"] || "-",
               Importance: idea.metadata?.["중요도"] ? "\u2605".repeat(parseInt(idea.metadata["중요도"])) : "-",
               Severity: idea.metadata?.["위급도"] || "-",
               Urgency: idea.metadata?.["긴급도"] || "-",
+              Owner: idea.metadata?.["오너"] || "-",
+              People: idea.metadata?.related_people || "-",
               Created: idea.metadata?.["작성일"] || "-",
               Modified: idea.last_modified?.split("T")[0] || "-",
             }));
@@ -471,10 +474,13 @@ export default function IdeasPage() {
           onExportMD={() => {
             const rows = sortedFiltered.map((idea) => ({
               Project: idea.metadata?.label || idea.name,
+              Description: idea.metadata?.description || "-",
               Type: idea.metadata?.["유형"] || "-",
               Importance: idea.metadata?.["중요도"] ? "\u2605".repeat(parseInt(idea.metadata["중요도"])) : "-",
               Severity: idea.metadata?.["위급도"] || "-",
               Urgency: idea.metadata?.["긴급도"] || "-",
+              Owner: idea.metadata?.["오너"] || "-",
+              People: idea.metadata?.related_people || "-",
               Created: idea.metadata?.["작성일"] || "-",
               Modified: idea.last_modified?.split("T")[0] || "-",
             }));
@@ -484,10 +490,14 @@ export default function IdeasPage() {
             const rows = sortedFiltered.map((idea) => ({
               Project: idea.metadata?.label || idea.name,
               Folder: idea.name,
+              Description: idea.metadata?.description || "",
               Type: idea.metadata?.["유형"] || "",
               Importance: idea.metadata?.["중요도"] || "",
               Severity: idea.metadata?.["위급도"] || "",
               Urgency: idea.metadata?.["긴급도"] || "",
+              Owner: idea.metadata?.["오너"] || "",
+              People: idea.metadata?.related_people || "",
+              Port: idea.metadata?.["포트"]?.toString() || "",
               Created: idea.metadata?.["작성일"] || "",
               Modified: idea.last_modified?.split("T")[0] || "",
             }));

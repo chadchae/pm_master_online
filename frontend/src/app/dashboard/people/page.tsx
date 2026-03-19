@@ -14,10 +14,13 @@ import {
   Save,
   Loader2,
   Link2,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import toast from "react-hot-toast";
 import { useLocale } from "@/lib/i18n";
+import { ListExportBar, generateMD, generateCSV, downloadFile, printList } from "@/components/ListExportBar";
 
 // Types
 interface Person {
@@ -471,6 +474,32 @@ export default function PeoplePage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const [sortKey, setSortKey] = useState<string>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedPeople = [...people].sort((a, b) => {
+    let va = "", vb = "";
+    switch (sortKey) {
+      case "name": va = a.name.toLowerCase(); vb = b.name.toLowerCase(); break;
+      case "role": va = (a.role || "").toLowerCase(); vb = (b.role || "").toLowerCase(); break;
+      case "affiliation": va = (a.affiliation || "").toLowerCase(); vb = (b.affiliation || "").toLowerCase(); break;
+      case "email": va = (a.email || "").toLowerCase(); vb = (b.email || "").toLowerCase(); break;
+      case "relationship": va = a.relationship || ""; vb = b.relationship || ""; break;
+      case "projects": va = String(a.projects?.length || 0); vb = String(b.projects?.length || 0); break;
+    }
+    const cmp = va.localeCompare(vb);
+    return sortDir === "asc" ? cmp : -cmp;
+  });
 
   const fetchPeople = useCallback(async () => {
     try {
@@ -606,6 +635,31 @@ export default function PeoplePage() {
               </button>
             )}
           </div>
+          {/* View toggle */}
+          <div className="flex items-center bg-neutral-100 dark:bg-neutral-800 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode("card")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewMode === "card"
+                  ? "bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm"
+                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Cards
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewMode === "list"
+                  ? "bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm"
+                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              List
+            </button>
+          </div>
           {/* Add button */}
           <button
             onClick={() => {
@@ -649,7 +703,7 @@ export default function PeoplePage() {
             {searchQuery ? t("people.noMatch") : t("people.noPeople")}
           </p>
         </div>
-      ) : (
+      ) : viewMode === "card" ? (
         /* Card grid */
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {people.map((person) => (
@@ -666,6 +720,156 @@ export default function PeoplePage() {
             />
           ))}
         </div>
+      ) : (
+        /* List view */
+        <>
+          <ListExportBar
+            onPrint={() => {
+              const rows = sortedPeople.map((p) => ({
+                Name: p.name,
+                "Korean Name": p.name_ko || "-",
+                Role: p.role || "-",
+                Affiliation: p.affiliation || "-",
+                Email: p.email || "-",
+                Relationship: p.relationship || "-",
+                Expertise: p.expertise.length > 0 ? p.expertise.join(", ") : "-",
+                Projects: p.projects.length > 0 ? p.projects.join(", ") : "-",
+              }));
+              printList("People", rows);
+            }}
+            onExportMD={() => {
+              const rows = sortedPeople.map((p) => ({
+                Name: p.name,
+                "Korean Name": p.name_ko || "-",
+                Role: p.role || "-",
+                Affiliation: p.affiliation || "-",
+                Email: p.email || "-",
+                Relationship: p.relationship || "-",
+                Expertise: p.expertise.length > 0 ? p.expertise.join(", ") : "-",
+                Projects: p.projects.length > 0 ? p.projects.join(", ") : "-",
+              }));
+              downloadFile(generateMD("People", rows), "people.md", "text/markdown");
+            }}
+            onExportCSV={() => {
+              const rows = sortedPeople.map((p) => ({
+                Name: p.name,
+                "Korean Name": p.name_ko || "",
+                Role: p.role || "",
+                Affiliation: p.affiliation || "",
+                Email: p.email || "",
+                Relationship: p.relationship || "",
+                Expertise: p.expertise.join(", "),
+                Projects: p.projects.join(", "),
+              }));
+              downloadFile(generateCSV(rows), "people.csv", "text/csv");
+            }}
+          />
+          <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50">
+                  {[
+                    { key: "name", label: "Name" },
+                    { key: "role", label: "Role" },
+                    { key: "affiliation", label: "Affiliation" },
+                    { key: "email", label: "Email" },
+                    { key: "relationship", label: "Relationship" },
+                    { key: "projects", label: "Projects" },
+                  ].map((col) => (
+                    <th
+                      key={col.key}
+                      className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none"
+                      onClick={() => toggleSort(col.key)}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {col.label}
+                        {sortKey === col.key && (
+                          <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>
+                        )}
+                      </span>
+                    </th>
+                  ))}
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                {sortedPeople.map((person) => {
+                  const relColor =
+                    RELATIONSHIP_COLORS[person.relationship] || RELATIONSHIP_COLORS.external;
+                  return (
+                    <tr
+                      key={person.id}
+                      className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-medium text-neutral-900 dark:text-white">
+                            {person.name}
+                          </p>
+                          {person.name_ko && (
+                            <p className="text-xs text-neutral-400">{person.name_ko}</p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                        {person.role || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                        {person.affiliation || "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {person.email ? (
+                          <a
+                            href={`mailto:${person.email}`}
+                            className="text-neutral-600 dark:text-neutral-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                          >
+                            {person.email}
+                          </a>
+                        ) : (
+                          <span className="text-neutral-300">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {person.relationship && (
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${relColor}`}
+                          >
+                            {person.relationship}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">
+                        {person.projects.length > 0
+                          ? person.projects.join(", ")
+                          : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setEditingId(person.id)}
+                            className="p-1.5 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(person.id)}
+                            className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

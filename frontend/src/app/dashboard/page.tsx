@@ -658,11 +658,16 @@ export default function DashboardPage() {
             onPrint={() => {
               const rows = sortedListProjects.map((p) => ({
                 Project: p.metadata?.label || p.name,
+                Description: p.metadata?.description || "-",
                 Stage: getStageByFolder(p.stage)?.label || p.stage,
                 Type: p.metadata?.["유형"] || "-",
                 Importance: p.metadata?.["중요도"] ? "\u2605".repeat(parseInt(p.metadata["중요도"])) : "-",
                 Severity: p.metadata?.["위급도"] || "-",
                 Urgency: p.metadata?.["긴급도"] || "-",
+                Owner: p.metadata?.["오너"] || "-",
+                People: p.metadata?.related_people || "-",
+                Port: p.metadata?.["포트"]?.toString() || "-",
+                "Target End": p.metadata?.["목표종료일"] || "-",
                 Created: p.metadata?.["작성일"] || "-",
                 Modified: p.last_modified?.split("T")[0] || "-",
               }));
@@ -671,11 +676,16 @@ export default function DashboardPage() {
             onExportMD={() => {
               const rows = sortedListProjects.map((p) => ({
                 Project: p.metadata?.label || p.name,
+                Description: p.metadata?.description || "-",
                 Stage: getStageByFolder(p.stage)?.label || p.stage,
                 Type: p.metadata?.["유형"] || "-",
                 Importance: p.metadata?.["중요도"] ? "\u2605".repeat(parseInt(p.metadata["중요도"])) : "-",
                 Severity: p.metadata?.["위급도"] || "-",
                 Urgency: p.metadata?.["긴급도"] || "-",
+                Owner: p.metadata?.["오너"] || "-",
+                People: p.metadata?.related_people || "-",
+                Port: p.metadata?.["포트"]?.toString() || "-",
+                "Target End": p.metadata?.["목표종료일"] || "-",
                 Created: p.metadata?.["작성일"] || "-",
                 Modified: p.last_modified?.split("T")[0] || "-",
               }));
@@ -685,11 +695,18 @@ export default function DashboardPage() {
               const rows = sortedListProjects.map((p) => ({
                 Project: p.metadata?.label || p.name,
                 Folder: p.name,
+                Description: p.metadata?.description || "",
                 Stage: getStageByFolder(p.stage)?.label || p.stage,
                 Type: p.metadata?.["유형"] || "",
                 Importance: p.metadata?.["중요도"] || "",
                 Severity: p.metadata?.["위급도"] || "",
                 Urgency: p.metadata?.["긴급도"] || "",
+                Collaboration: p.metadata?.["협업"] || "",
+                Owner: p.metadata?.["오너"] || "",
+                People: p.metadata?.related_people || "",
+                Port: p.metadata?.["포트"]?.toString() || "",
+                "Target End": p.metadata?.["목표종료일"] || "",
+                "Actual End": p.metadata?.["실제종료일"] || "",
                 Created: p.metadata?.["작성일"] || "",
                 Modified: p.last_modified?.split("T")[0] || "",
               }));

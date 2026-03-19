@@ -12,41 +12,71 @@ import { ConfirmDialog, NewProjectDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
 import toast from "react-hot-toast";
 
-const DASH_THEMES = {
-  A: { // Elevated Card
-    label: "A",
-    column: "bg-neutral-100 dark:bg-neutral-800/50",
-    columnBorder: "border-neutral-300 dark:border-neutral-700",
-    card: "bg-white dark:bg-neutral-800",
-    cardBorder: "border-neutral-200 dark:border-neutral-600",
-    cardHover: "hover:border-indigo-300 dark:hover:border-indigo-600",
+// Light theme variations
+const LIGHT_THEMES = {
+  A: { // Clean White
+    column: "bg-white",
+    columnBorder: "border-gray-200",
+    card: "bg-white",
+    cardBorder: "border-gray-200",
+    cardHover: "hover:border-indigo-300",
   },
-  B: { // Sunken Background
-    label: "B",
-    column: "bg-neutral-200/50 dark:bg-black/40",
-    columnBorder: "border-neutral-300 dark:border-neutral-700",
-    card: "bg-white dark:bg-neutral-900",
-    cardBorder: "border-neutral-300 dark:border-neutral-600",
-    cardHover: "hover:border-indigo-300 dark:hover:border-indigo-600",
+  B: { // Layered Gray
+    column: "bg-neutral-100",
+    columnBorder: "border-neutral-300",
+    card: "bg-white",
+    cardBorder: "border-neutral-300",
+    cardHover: "hover:border-indigo-400",
   },
-  C: { // Warm Neutral
-    label: "C",
-    column: "bg-stone-50 dark:bg-zinc-900/60",
-    columnBorder: "border-stone-300 dark:border-zinc-600",
-    card: "bg-white dark:bg-zinc-800",
-    cardBorder: "border-stone-200 dark:border-zinc-600",
-    cardHover: "hover:border-indigo-300 dark:hover:border-indigo-600",
+  C: { // Warm Paper
+    column: "bg-orange-50/50",
+    columnBorder: "border-amber-200",
+    card: "bg-white",
+    cardBorder: "border-amber-200",
+    cardHover: "hover:border-indigo-300",
   },
-  D: { // Subtle Tint (Indigo)
-    label: "D",
-    column: "bg-slate-50 dark:bg-slate-900/50",
-    columnBorder: "border-slate-200 dark:border-slate-600",
-    card: "bg-white dark:bg-slate-800",
-    cardBorder: "border-slate-200 dark:border-slate-500",
-    cardHover: "hover:border-indigo-300 dark:hover:border-indigo-500",
+  D: { // Blue Tint
+    column: "bg-slate-50",
+    columnBorder: "border-blue-200",
+    card: "bg-white",
+    cardBorder: "border-blue-200",
+    cardHover: "hover:border-indigo-400",
   },
 } as const;
-type DashThemeKey = keyof typeof DASH_THEMES;
+
+// Dark theme variations
+const DARK_THEMES = {
+  A: { // Elevated Card
+    column: "bg-neutral-800/50",
+    columnBorder: "border-neutral-700",
+    card: "bg-neutral-800",
+    cardBorder: "border-neutral-600",
+    cardHover: "hover:border-indigo-600",
+  },
+  B: { // Sunken Background
+    column: "bg-black/40",
+    columnBorder: "border-neutral-700",
+    card: "bg-neutral-900",
+    cardBorder: "border-neutral-600",
+    cardHover: "hover:border-indigo-600",
+  },
+  C: { // Warm Neutral
+    column: "bg-zinc-900/60",
+    columnBorder: "border-zinc-600",
+    card: "bg-zinc-800",
+    cardBorder: "border-zinc-600",
+    cardHover: "hover:border-indigo-600",
+  },
+  D: { // Subtle Tint
+    column: "bg-slate-900/50",
+    columnBorder: "border-slate-600",
+    card: "bg-slate-800",
+    cardBorder: "border-slate-500",
+    cardHover: "hover:border-indigo-500",
+  },
+} as const;
+
+type ThemeKey = "A" | "B" | "C" | "D";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -78,17 +108,35 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showNewProject, setShowNewProject] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
-  const [dashTheme, setDashTheme] = useState<DashThemeKey>(() => {
+  const [isDark, setIsDark] = useState(false);
+  const [lightTheme, setLightTheme] = useState<ThemeKey>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("pm_dashTheme");
-      if (saved && saved in DASH_THEMES) return saved as DashThemeKey;
+      const saved = localStorage.getItem("pm_lightTheme");
+      if (saved && ["A","B","C","D"].includes(saved)) return saved as ThemeKey;
+    }
+    return "A";
+  });
+  const [darkTheme, setDarkTheme] = useState<ThemeKey>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("pm_darkTheme");
+      if (saved && ["A","B","C","D"].includes(saved)) return saved as ThemeKey;
     }
     return "A";
   });
 
   useEffect(() => {
-    localStorage.setItem("pm_dashTheme", dashTheme);
-  }, [dashTheme]);
+    const checkDark = () => setIsDark(document.documentElement.classList.contains("dark"));
+    checkDark();
+    const obs = new MutationObserver(checkDark);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => { localStorage.setItem("pm_lightTheme", lightTheme); }, [lightTheme]);
+  useEffect(() => { localStorage.setItem("pm_darkTheme", darkTheme); }, [darkTheme]);
+
+  const activeThemeKey = isDark ? darkTheme : lightTheme;
+  const setActiveTheme = (key: ThemeKey) => { isDark ? setDarkTheme(key) : setLightTheme(key); };
 
   useEffect(() => {
     loadData();
@@ -262,7 +310,7 @@ export default function DashboardPage() {
     return sortDir === "asc" ? cmp : -cmp;
   });
 
-  const theme = DASH_THEMES[dashTheme];
+  const theme = isDark ? DARK_THEMES[darkTheme] : LIGHT_THEMES[lightTheme];
 
   if (loading) {
     return (
@@ -428,16 +476,16 @@ export default function DashboardPage() {
             </button>
           </div>
           <div className="flex items-center gap-1 ml-2">
-            {(Object.keys(DASH_THEMES) as DashThemeKey[]).map((key) => (
+            {(["A", "B", "C", "D"] as ThemeKey[]).map((key) => (
               <button
                 key={key}
-                onClick={() => setDashTheme(key)}
+                onClick={() => setActiveTheme(key)}
                 className={`w-6 h-6 rounded-full text-[10px] font-bold transition-colors ${
-                  dashTheme === key
+                  activeThemeKey === key
                     ? "bg-indigo-600 text-white"
                     : "bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600"
                 }`}
-                title={`Theme ${key}`}
+                title={`${isDark ? "Dark" : "Light"} Theme ${key}`}
               >
                 {key}
               </button>

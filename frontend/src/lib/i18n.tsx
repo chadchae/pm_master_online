@@ -162,6 +162,15 @@ const translations: Record<Locale, Record<string, string>> = {
     "schedule.parentTask": "상위 작업",
     "schedule.description": "설명",
     "schedule.days": "일",
+    "schedule.category": "카테고리",
+    "schedule.newCategory": "새 카테고리",
+    "schedule.general": "일반",
+    "schedule.predecessorRequired": "선행작업 완료 필요",
+    "schedule.1w": "1주",
+    "schedule.2w": "2주",
+    "schedule.3w": "3주",
+    "schedule.1m": "1개월",
+    "schedule.all": "전체",
 
     // Subtasks
     "subtask.subtasks": "하위 작업",
@@ -502,6 +511,15 @@ const translations: Record<Locale, Record<string, string>> = {
     "schedule.parentTask": "Parent Task",
     "schedule.description": "Description",
     "schedule.days": "days",
+    "schedule.category": "Category",
+    "schedule.newCategory": "New Category",
+    "schedule.general": "General",
+    "schedule.predecessorRequired": "Predecessor tasks must be completed",
+    "schedule.1w": "1W",
+    "schedule.2w": "2W",
+    "schedule.3w": "3W",
+    "schedule.1m": "1M",
+    "schedule.all": "All",
 
     // Subtasks
     "subtask.subtasks": "Subtasks",

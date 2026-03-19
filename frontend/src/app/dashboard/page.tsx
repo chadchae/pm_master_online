@@ -28,6 +28,7 @@ export default function DashboardPage() {
   } | null>(null);
   const [cardOrder, setCardOrder] = useState<Record<string, string[]>>({});
   const [dragOverCard, setDragOverCard] = useState<string | null>(null);
+  const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
@@ -51,7 +52,20 @@ export default function DashboardPage() {
   };
 
   // Filter out idea-stage projects for kanban (ideas have their own page)
-  const kanbanProjects = projects.filter((p) => p.stage !== "1_idea_stage");
+  const kanbanProjects = projects.filter((p) => {
+    if (p.stage === "1_idea_stage") return false;
+    if (typeFilters.size === 0) return true; // No filter = show all
+    const pType = p.metadata?.["유형"] || "";
+    return typeFilters.has(pType);
+  });
+
+  // Collect unique types for filter checkboxes
+  const allTypes = [...new Set(
+    projects
+      .filter((p) => p.stage !== "1_idea_stage")
+      .map((p) => p.metadata?.["유형"] || "")
+      .filter(Boolean)
+  )];
   const ideaCount = projects.filter((p) => p.stage === "1_idea_stage").length;
 
   // Group projects by stage (kanban only), apply saved card order
@@ -189,6 +203,19 @@ export default function DashboardPage() {
             <div>
               <p className="text-2xl font-bold text-neutral-900 dark:text-white">{kanbanProjects.length}</p>
               <p className="text-sm text-neutral-500 dark:text-neutral-400">{t("dashboard.activeProjects")}</p>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                {(() => {
+                  const all = projects.filter((p) => p.stage !== "1_idea_stage");
+                  const research = all.filter((p) => (p.metadata?.["유형"] || "").includes("연구")).length;
+                  const dev = all.filter((p) => p.metadata?.["유형"] === "개발").length;
+                  const etc = all.length - research - dev;
+                  const parts = [];
+                  if (research) parts.push(`연구: ${research}`);
+                  if (dev) parts.push(`개발: ${dev}`);
+                  if (etc > 0) parts.push(`기타: ${etc}`);
+                  return parts.join(" | ");
+                })()}
+              </p>
             </div>
           </div>
         </div>
@@ -239,11 +266,20 @@ export default function DashboardPage() {
                 const folder = prompt(t("ideas.folderName"));
                 if (!folder?.trim()) return;
                 const label = prompt(t("ideas.displayName")) || folder;
+                const typeOptions = "1: 개발\n2: 연구\n3: 연구+개발\n4: 직접 입력";
+                const typeChoice = prompt(`${t("ideas.type")}\n${typeOptions}`, "1");
+                let projectType = "";
+                if (typeChoice === "1") projectType = "개발";
+                else if (typeChoice === "2") projectType = "연구";
+                else if (typeChoice === "3") projectType = "연구+개발";
+                else if (typeChoice === "4") { projectType = prompt("유형 입력:") || ""; }
+                else if (typeChoice) projectType = typeChoice;
                 apiFetch("/api/projects/create", {
                   method: "POST",
                   body: JSON.stringify({
                     folder_name: folder.trim().toLowerCase().replace(/\s+/g, "-"),
                     label,
+                    project_type: projectType,
                     stage: "2_initiation_stage",
                   }),
                 }).then(() => { loadData(); toast.success(`Created "${label}"`); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
@@ -254,6 +290,36 @@ export default function DashboardPage() {
               {t("projects.newProject")}
             </button>
           </div>
+          {/* Type filter checkboxes */}
+          {allTypes.length > 0 && (
+            <div className="flex items-center gap-2 mr-3">
+              {allTypes.map((type) => (
+                <label key={type} className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={typeFilters.has(type)}
+                    onChange={() => {
+                      setTypeFilters((prev) => {
+                        const next = new Set(prev);
+                        next.has(type) ? next.delete(type) : next.add(type);
+                        return next;
+                      });
+                    }}
+                    className="w-3.5 h-3.5 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {type}
+                </label>
+              ))}
+              {typeFilters.size > 0 && (
+                <button
+                  onClick={() => setTypeFilters(new Set())}
+                  className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex items-center bg-neutral-100 dark:bg-neutral-800 rounded-lg p-0.5">
             <button
               onClick={() => setViewMode("kanban")}

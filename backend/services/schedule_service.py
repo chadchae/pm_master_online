@@ -18,12 +18,24 @@ def _load_schedule(project_name: str) -> dict[str, Any]:
     """Load schedule for a project, creating default if not exists."""
     data_file = _get_data_file(project_name)
     if not data_file.exists():
-        return {"tasks": [], "milestones": []}
+        return {
+            "tasks": [],
+            "milestones": [],
+            "categories": [{"name": "General", "color": "#6b7280"}],
+        }
     try:
         with open(data_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        # Ensure categories key exists for backwards compatibility
+        if "categories" not in data:
+            data["categories"] = [{"name": "General", "color": "#6b7280"}]
+        return data
     except (json.JSONDecodeError, OSError):
-        return {"tasks": [], "milestones": []}
+        return {
+            "tasks": [],
+            "milestones": [],
+            "categories": [{"name": "General", "color": "#6b7280"}],
+        }
 
 
 def _save_schedule(project_name: str, data: dict[str, Any]) -> None:
@@ -83,6 +95,7 @@ def create_task(project_name: str, task_data: dict[str, Any]) -> dict[str, Any]:
         "status": task_data.get("status", "planned"),
         "depends_on": task_data.get("depends_on", []),
         "parent_id": task_data.get("parent_id", ""),
+        "category": task_data.get("category", ""),
         "progress_pct": task_data.get("progress_pct", 0),
         "order": max_order + 1,
     }
@@ -96,12 +109,26 @@ def create_task(project_name: str, task_data: dict[str, Any]) -> dict[str, Any]:
 def update_task(
     project_name: str, task_id: str, updates: dict[str, Any]
 ) -> dict[str, Any] | None:
-    """Update a schedule task's fields, auto-recalc duration."""
+    """Update a schedule task's fields, auto-recalc duration.
+
+    Enforces dependency rule: cannot move to in_progress if predecessor
+    tasks are not done.
+    """
     data = _load_schedule(project_name)
     tasks = data.get("tasks", [])
 
     for task in tasks:
         if task["id"] == task_id:
+            # Dependency enforcement: block in_progress if predecessors not done
+            new_status = updates.get("status")
+            if new_status == "in_progress":
+                depends_on = updates.get("depends_on", task.get("depends_on", []))
+                if depends_on:
+                    task_map = {t["id"]: t for t in tasks}
+                    for dep_id in depends_on:
+                        dep_task = task_map.get(dep_id)
+                        if dep_task and dep_task.get("status") != "done":
+                            return {"error": "predecessor_not_done"}
             for key, val in updates.items():
                 if key != "id":
                     task[key] = val
@@ -203,6 +230,46 @@ def delete_milestone(project_name: str, ms_id: str) -> bool:
     data["milestones"] = [m for m in milestones if m["id"] != ms_id]
 
     if len(data["milestones"]) < original_len:
+        _save_schedule(project_name, data)
+        return True
+    return False
+
+
+def list_categories(project_name: str) -> list[dict[str, Any]]:
+    """Return all categories for a project."""
+    data = _load_schedule(project_name)
+    return data.get("categories", [{"name": "General", "color": "#6b7280"}])
+
+
+def create_category(
+    project_name: str, name: str, color: str
+) -> dict[str, Any]:
+    """Add a new category to the project schedule."""
+    data = _load_schedule(project_name)
+    categories = data.get("categories", [])
+    # Prevent duplicates
+    for cat in categories:
+        if cat["name"] == name:
+            return cat
+    new_cat = {"name": name, "color": color}
+    categories.append(new_cat)
+    data["categories"] = categories
+    _save_schedule(project_name, data)
+    return new_cat
+
+
+def delete_category(project_name: str, category_name: str) -> bool:
+    """Delete a category and clear it from tasks."""
+    data = _load_schedule(project_name)
+    categories = data.get("categories", [])
+    original_len = len(categories)
+    data["categories"] = [c for c in categories if c["name"] != category_name]
+
+    if len(data["categories"]) < original_len:
+        # Clear category from tasks that had it
+        for task in data.get("tasks", []):
+            if task.get("category") == category_name:
+                task["category"] = ""
         _save_schedule(project_name, data)
         return True
     return False

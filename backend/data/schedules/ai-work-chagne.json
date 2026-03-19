@@ -1,0 +1,35 @@
+{
+  "tasks": [
+    {
+      "id": "2ab50f1b-fcec-4754-96b8-c42556caf930",
+      "title": "이슈설정",
+      "description": "",
+      "start_date": "2026-03-20",
+      "end_date": "2026-03-20",
+      "duration_days": 0,
+      "assignee": "Chad",
+      "status": "in_progress",
+      "depends_on": [],
+      "parent_id": "",
+      "progress_pct": 0,
+      "order": 0
+    },
+    {
+      "id": "4c72b3d8-f7a7-4d90-a899-adf4a3fc30bd",
+      "title": "리터리쳐리뷰 수행",
+      "description": "",
+      "start_date": "",
+      "end_date": "",
+      "duration_days": 0,
+      "assignee": "Chad",
+      "status": "planned",
+      "depends_on": [
+        "2ab50f1b-fcec-4754-96b8-c42556caf930"
+      ],
+      "parent_id": "",
+      "progress_pct": 0,
+      "order": 1
+    }
+  ],
+  "milestones": []
+}

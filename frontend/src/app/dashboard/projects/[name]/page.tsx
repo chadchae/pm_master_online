@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useState, useRef, lazy, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, Project, FileItem } from "@/lib/api";
 import { getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
@@ -331,8 +331,13 @@ export default function ProjectDetailPage() {
     status: string;
     depends_on: string[];
     parent_id: string;
+    category: string;
     progress_pct: number;
     order: number;
+  }
+  interface ScheduleCategory {
+    name: string;
+    color: string;
   }
   interface Milestone {
     id: string;
@@ -354,6 +359,26 @@ export default function ProjectDetailPage() {
   const [newSchedStatus, setNewSchedStatus] = useState("planned");
   const [newSchedParent, setNewSchedParent] = useState("");
   const [newSchedDepends, setNewSchedDepends] = useState<string[]>([]);
+  const [newSchedCategory, setNewSchedCategory] = useState("");
+  // Edit task inline state
+  const [editingSchedId, setEditingSchedId] = useState<string | null>(null);
+  const [editSchedTitle, setEditSchedTitle] = useState("");
+  const [editSchedStart, setEditSchedStart] = useState("");
+  const [editSchedEnd, setEditSchedEnd] = useState("");
+  const [editSchedAssignee, setEditSchedAssignee] = useState("");
+  const [editSchedStatus, setEditSchedStatus] = useState("");
+  const [editSchedCategory, setEditSchedCategory] = useState("");
+  const [editSchedParent, setEditSchedParent] = useState("");
+  const [editSchedDepends, setEditSchedDepends] = useState<string[]>([]);
+  // Category state
+  const [categories, setCategories] = useState<ScheduleCategory[]>([]);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatColor, setNewCatColor] = useState("#6b7280");
+  // Gantt responsive state
+  const [ganttRange, setGanttRange] = useState<number>(21);
+  const ganttContainerRef = useRef<HTMLDivElement>(null);
+  const [ganttContainerWidth, setGanttContainerWidth] = useState(800);
   const [newMsTitle, setNewMsTitle] = useState("");
   const [newMsDate, setNewMsDate] = useState("");
   const [newMsDesc, setNewMsDesc] = useState("");
@@ -362,11 +387,12 @@ export default function ProjectDetailPage() {
 
   const loadSchedule = async () => {
     try {
-      const res = await apiFetch<{ tasks: ScheduleTask[]; milestones: Milestone[] }>(
+      const res = await apiFetch<{ tasks: ScheduleTask[]; milestones: Milestone[]; categories: ScheduleCategory[] }>(
         `/api/projects/${encodeURIComponent(name)}/schedule`
       );
       setScheduleTasks(res.tasks || []);
       setMilestones(res.milestones || []);
+      setCategories(res.categories || [{ name: "General", color: "#6b7280" }]);
     } catch {}
   };
 
@@ -383,6 +409,7 @@ export default function ProjectDetailPage() {
           status: newSchedStatus,
           parent_id: newSchedParent,
           depends_on: newSchedDepends,
+          category: newSchedCategory,
         }),
       });
       setNewSchedTitle("");
@@ -392,6 +419,7 @@ export default function ProjectDetailPage() {
       setNewSchedStatus("planned");
       setNewSchedParent("");
       setNewSchedDepends([]);
+      setNewSchedCategory("");
       setShowAddTask(false);
       loadSchedule();
       loadSummary();
@@ -451,6 +479,81 @@ export default function ProjectDetailPage() {
   const deleteMilestone = async (msId: string) => {
     try {
       await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/milestones/${msId}`, {
+        method: "DELETE",
+      });
+      loadSchedule();
+    } catch {
+      toast.error(t("toast.failedToDelete"));
+    }
+  };
+
+  // Save inline edit for schedule task
+  const saveEditScheduleTask = async () => {
+    if (!editingSchedId || !editSchedTitle.trim()) return;
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/tasks/${editingSchedId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: editSchedTitle.trim(),
+          start_date: editSchedStart,
+          end_date: editSchedEnd,
+          assignee: editSchedAssignee.trim(),
+          status: editSchedStatus,
+          category: editSchedCategory,
+          parent_id: editSchedParent,
+          depends_on: editSchedDepends,
+        }),
+      });
+      setEditingSchedId(null);
+      loadSchedule();
+      loadSummary();
+    } catch {
+      toast.error(t("toast.failedToSave"));
+    }
+  };
+
+  // Start editing a schedule task
+  const startEditScheduleTask = (task: ScheduleTask) => {
+    setEditingSchedId(task.id);
+    setEditSchedTitle(task.title);
+    setEditSchedStart(task.start_date);
+    setEditSchedEnd(task.end_date);
+    setEditSchedAssignee(task.assignee);
+    setEditSchedStatus(task.status);
+    setEditSchedCategory(task.category || "");
+    setEditSchedParent(task.parent_id);
+    setEditSchedDepends([...task.depends_on]);
+  };
+
+  // Check if task has unfinished dependencies
+  const hasUnfinishedDeps = (task: ScheduleTask): boolean => {
+    if (!task.depends_on || task.depends_on.length === 0) return false;
+    return task.depends_on.some((depId) => {
+      const depTask = scheduleTasks.find((t2) => t2.id === depId);
+      return depTask && depTask.status !== "done";
+    });
+  };
+
+  // Category CRUD
+  const createCategory = async () => {
+    if (!newCatName.trim()) return;
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/categories`, {
+        method: "POST",
+        body: JSON.stringify({ name: newCatName.trim(), color: newCatColor }),
+      });
+      setNewCatName("");
+      setNewCatColor("#6b7280");
+      setShowNewCategory(false);
+      loadSchedule();
+    } catch {
+      toast.error(t("toast.failedToCreate"));
+    }
+  };
+
+  const deleteCategory = async (catName: string) => {
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/categories/${encodeURIComponent(catName)}`, {
         method: "DELETE",
       });
       loadSchedule();
@@ -636,6 +739,19 @@ export default function ProjectDetailPage() {
     if (activeTab === "issues") loadIssues();
     if (activeTab === "schedule") loadSchedule();
   }, [activeTab]);
+
+  // ResizeObserver for responsive Gantt chart
+  useEffect(() => {
+    const el = ganttContainerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setGanttContainerWidth(entry.contentRect.width);
+      }
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [scheduleView]);
 
   const loadDocs = async (path: string = docPath) => {
     const q = path ? `?subpath=${encodeURIComponent(path)}` : "";
@@ -2105,7 +2221,46 @@ export default function ProjectDetailPage() {
                     <option key={st.id} value={st.id}>{st.title}</option>
                   ))}
                 </select>
+                {/* Category select */}
+                <div className="flex gap-2">
+                  <select
+                    value={newSchedCategory}
+                    onChange={(e) => {
+                      if (e.target.value === "__new__") {
+                        setShowNewCategory(true);
+                      } else {
+                        setNewSchedCategory(e.target.value);
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                  >
+                    <option value="">{t("schedule.category")} (--)</option>
+                    {categories.map((cat) => (
+                      <option key={cat.name} value={cat.name}>{cat.name}</option>
+                    ))}
+                    <option value="__new__">+ {t("schedule.newCategory")}</option>
+                  </select>
+                </div>
               </div>
+              {/* New category inline form */}
+              {showNewCategory && (
+                <div className="flex items-center gap-2">
+                  <input
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    placeholder={t("schedule.newCategory")}
+                    className="px-3 py-1.5 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                  />
+                  <input
+                    type="color"
+                    value={newCatColor}
+                    onChange={(e) => setNewCatColor(e.target.value)}
+                    className="w-8 h-8 rounded border border-neutral-200 dark:border-neutral-700 cursor-pointer"
+                  />
+                  <button onClick={createCategory} className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">{t("action.create")}</button>
+                  <button onClick={() => setShowNewCategory(false)} className="px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-700">{t("action.cancel")}</button>
+                </div>
+              )}
               {/* Dependencies multi-select */}
               <div>
                 <label className="text-xs text-neutral-500 dark:text-neutral-400 mb-1 block">{t("schedule.dependencies")}</label>
@@ -2246,9 +2401,10 @@ export default function ProjectDetailPage() {
                       <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.duration")}</th>
                       <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.assignee")}</th>
                       <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.status")}</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.category")}</th>
                       <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.progress")}</th>
                       <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.dependencies")}</th>
-                      <th className="text-right px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 w-20"></th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 w-24"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2257,12 +2413,68 @@ export default function ProjectDetailPage() {
                       .map((task, idx) => {
                         const isOverdue = task.status === "overdue";
                         const isChild = !!task.parent_id;
+                        const isEditing = editingSchedId === task.id;
                         const statusColors: Record<string, string> = {
                           planned: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
                           in_progress: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
                           done: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
                           overdue: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
                         };
+                        const taskCat = categories.find((c) => c.name === task.category);
+                        const blockedInProgress = hasUnfinishedDeps(task);
+
+                        if (isEditing) {
+                          return (
+                            <tr key={task.id} className="border-b border-neutral-100 dark:border-neutral-800 bg-indigo-50/50 dark:bg-indigo-950/20">
+                              <td className="px-3 py-2 text-neutral-400 text-xs">{idx + 1}</td>
+                              <td className="px-2 py-1">
+                                <input value={editSchedTitle} onChange={(e) => setEditSchedTitle(e.target.value)} className="w-full px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                              </td>
+                              <td className="px-2 py-1">
+                                <input type="date" value={editSchedStart} onChange={(e) => setEditSchedStart(e.target.value)} className="px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                              </td>
+                              <td className="px-2 py-1">
+                                <input type="date" value={editSchedEnd} onChange={(e) => setEditSchedEnd(e.target.value)} className="px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                              </td>
+                              <td className="px-3 py-2 text-neutral-400 text-xs">-</td>
+                              <td className="px-2 py-1">
+                                <input value={editSchedAssignee} onChange={(e) => setEditSchedAssignee(e.target.value)} className="w-full px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                              </td>
+                              <td className="px-2 py-1">
+                                <select value={editSchedStatus} onChange={(e) => setEditSchedStatus(e.target.value)} className="text-xs px-2 py-1 rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white">
+                                  <option value="planned">{t("schedule.planned")}</option>
+                                  <option value="in_progress">{t("schedule.inProgress")}</option>
+                                  <option value="done">{t("schedule.done")}</option>
+                                </select>
+                              </td>
+                              <td className="px-2 py-1">
+                                <select value={editSchedCategory} onChange={(e) => setEditSchedCategory(e.target.value)} className="text-xs px-2 py-1 rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white">
+                                  <option value="">--</option>
+                                  {categories.map((cat) => (
+                                    <option key={cat.name} value={cat.name}>{cat.name}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="px-3 py-2 text-xs text-neutral-400">-</td>
+                              <td className="px-2 py-1">
+                                <div className="flex flex-wrap gap-0.5 max-w-[140px]">
+                                  {scheduleTasks.filter((st) => st.id !== task.id).map((st) => (
+                                    <button key={st.id} onClick={() => setEditSchedDepends((prev) => prev.includes(st.id) ? prev.filter((d) => d !== st.id) : [...prev, st.id])} className={`px-1.5 py-0 text-[10px] rounded-full border ${editSchedDepends.includes(st.id) ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 text-indigo-700 dark:text-indigo-300" : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
+                                      {st.title.slice(0, 10)}
+                                    </button>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-2 py-1 text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button onClick={saveEditScheduleTask} className="text-green-600 hover:text-green-700 p-1"><Check className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => setEditingSchedId(null)} className="text-neutral-400 hover:text-neutral-600 p-1"><X className="w-3.5 h-3.5" /></button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+
                         return (
                           <tr
                             key={task.id}
@@ -2282,13 +2494,31 @@ export default function ProjectDetailPage() {
                             <td className="px-3 py-2">
                               <select
                                 value={task.status}
-                                onChange={(e) => updateScheduleTask(task.id, { status: e.target.value })}
+                                onChange={(e) => {
+                                  if (e.target.value === "in_progress" && blockedInProgress) {
+                                    toast.error(t("schedule.predecessorRequired"));
+                                    return;
+                                  }
+                                  updateScheduleTask(task.id, { status: e.target.value });
+                                }}
                                 className={`text-xs px-2 py-0.5 rounded-full font-medium border-0 cursor-pointer ${statusColors[task.status] || statusColors.planned}`}
                               >
                                 <option value="planned">{t("schedule.planned")}</option>
-                                <option value="in_progress">{t("schedule.inProgress")}</option>
+                                <option value="in_progress" disabled={blockedInProgress}>
+                                  {blockedInProgress ? "\uD83D\uDD12 " : ""}{t("schedule.inProgress")}
+                                </option>
                                 <option value="done">{t("schedule.done")}</option>
                               </select>
+                            </td>
+                            <td className="px-3 py-2 text-xs">
+                              {taskCat ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: taskCat.color }} />
+                                  <span className="text-neutral-600 dark:text-neutral-400">{taskCat.name}</span>
+                                </span>
+                              ) : (
+                                <span className="text-neutral-400">-</span>
+                              )}
                             </td>
                             <td className="px-3 py-2">
                               <div className="flex items-center gap-2">
@@ -2314,12 +2544,21 @@ export default function ProjectDetailPage() {
                               }).filter(Boolean).join(", ") || "-"}
                             </td>
                             <td className="px-3 py-2 text-right">
-                              <button
-                                onClick={() => deleteScheduleTask(task.id)}
-                                className="text-neutral-400 hover:text-red-500 p-1"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => startEditScheduleTask(task)}
+                                  className="text-neutral-400 hover:text-indigo-500 p-1"
+                                  title={t("action.edit")}
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => deleteScheduleTask(task.id)}
+                                  className="text-neutral-400 hover:text-red-500 p-1"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2339,18 +2578,35 @@ export default function ProjectDetailPage() {
               if (allDates.length === 0) return null;
 
               const sorted = allDates.sort();
-              const minDate = new Date(sorted[0]);
-              const maxDate = new Date(sorted[sorted.length - 1]);
-              minDate.setDate(minDate.getDate() - 7);
-              maxDate.setDate(maxDate.getDate() + 14);
+              const minDateFull = new Date(sorted[0]);
+              const maxDateFull = new Date(sorted[sorted.length - 1]);
+              minDateFull.setDate(minDateFull.getDate() - 3);
+              maxDateFull.setDate(maxDateFull.getDate() + 7);
 
               const dayMs = 86400000;
-              const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / dayMs) + 1;
-              const dayWidth = 30;
-              const rowHeight = 32;
-              const headerHeight = 40;
+              // For "All" range, use full date span; otherwise use ganttRange days
+              const isAllRange = ganttRange === 0;
               const today = new Date();
               today.setHours(0, 0, 0, 0);
+
+              let minDate: Date;
+              let maxDate: Date;
+              if (isAllRange) {
+                minDate = minDateFull;
+                maxDate = maxDateFull;
+              } else {
+                // Center on today
+                const halfRange = Math.floor(ganttRange / 2);
+                minDate = new Date(today.getTime() - halfRange * dayMs);
+                maxDate = new Date(today.getTime() + (ganttRange - halfRange) * dayMs);
+              }
+
+              const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / dayMs) + 1;
+              // Responsive dayWidth: fit ganttRange days into container
+              const effectiveContainerWidth = ganttContainerWidth - 192; // subtract left panel width
+              const dayWidth = isAllRange ? 30 : Math.max(Math.floor(effectiveContainerWidth / ganttRange), 14);
+              const rowHeight = 32;
+              const headerHeight = 40;
               const todayOffset = Math.floor((today.getTime() - minDate.getTime()) / dayMs);
 
               // Generate month headers
@@ -2385,8 +2641,72 @@ export default function ProjectDetailPage() {
 
               const sortedTasks = [...scheduleTasks].sort((a, b) => a.order - b.order);
 
+              // Group tasks by category for Gantt display
+              const catGroupOrder = categories.map((c) => c.name);
+              const catMap: Record<string, ScheduleTask[]> = {};
+              for (const cat of categories) catMap[cat.name] = [];
+              catMap[""] = []; // uncategorized
+              for (const task of sortedTasks) {
+                const key = task.category || "";
+                if (!catMap[key]) catMap[key] = [];
+                catMap[key].push(task);
+              }
+              // Build flat list with category headers interleaved
+              type GanttRow = { type: "category"; name: string; color: string } | { type: "task"; task: ScheduleTask };
+              const ganttRows: GanttRow[] = [];
+              for (const catName of catGroupOrder) {
+                const tasks = catMap[catName] || [];
+                if (tasks.length > 0) {
+                  const cat = categories.find((c) => c.name === catName);
+                  ganttRows.push({ type: "category", name: catName, color: cat?.color || "#6b7280" });
+                  for (const task of tasks) ganttRows.push({ type: "task", task });
+                }
+              }
+              // Uncategorized tasks under "General"
+              if (catMap[""] && catMap[""].length > 0) {
+                const alreadyInGeneral = catGroupOrder.includes("General") ? [] : catMap[""];
+                if (alreadyInGeneral.length > 0) {
+                  ganttRows.push({ type: "category", name: t("schedule.general"), color: "#6b7280" });
+                  for (const task of alreadyInGeneral) ganttRows.push({ type: "task", task });
+                } else {
+                  // Merge uncategorized into General group
+                  const generalIdx = ganttRows.findIndex((r) => r.type === "category" && r.name === "General");
+                  if (generalIdx >= 0) {
+                    // Find insertion point: after last task in General group
+                    let insertIdx = generalIdx + 1;
+                    while (insertIdx < ganttRows.length && ganttRows[insertIdx].type === "task") insertIdx++;
+                    for (const task of catMap[""]) ganttRows.splice(insertIdx++, 0, { type: "task", task });
+                  }
+                }
+              }
+              const ganttTaskRows = ganttRows.filter((r) => r.type === "task") as { type: "task"; task: ScheduleTask }[];
+              const categoryRowHeight = 24;
+
               return (
-                <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+                <div className="space-y-2">
+                  {/* Range selector */}
+                  <div className="flex items-center gap-1">
+                    {([
+                      { label: t("schedule.1w"), days: 7 },
+                      { label: t("schedule.2w"), days: 14 },
+                      { label: t("schedule.3w"), days: 21 },
+                      { label: t("schedule.1m"), days: 30 },
+                      { label: t("schedule.all"), days: 0 },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.days}
+                        onClick={() => setGanttRange(opt.days)}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-md ${
+                          ganttRange === opt.days
+                            ? "bg-indigo-600 text-white"
+                            : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div ref={ganttContainerRef} className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
                   {/* Milestones row */}
                   {milestones.length > 0 && (
                     <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-neutral-200 dark:border-neutral-800 flex flex-wrap gap-2">
@@ -2403,22 +2723,33 @@ export default function ProjectDetailPage() {
                     </div>
                   )}
                   <div className="flex">
-                    {/* Task labels (left side) */}
+                    {/* Task labels (left side) with category grouping */}
                     <div className="flex-shrink-0 w-48 border-r border-neutral-200 dark:border-neutral-800">
                       <div className="h-[40px] border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50 px-3 flex items-center">
                         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.taskTitle")}</span>
                       </div>
-                      {sortedTasks.map((task) => (
-                        <div
-                          key={task.id}
-                          className={`h-[32px] px-3 flex items-center border-b border-neutral-100 dark:border-neutral-800 text-xs truncate ${
-                            task.parent_id ? "pl-6" : ""
-                          } ${task.status === "overdue" ? "text-red-600 dark:text-red-400" : "text-neutral-700 dark:text-neutral-300"}`}
-                        >
-                          {task.parent_id && <span className="text-neutral-400 mr-1">&#8627;</span>}
-                          {task.title}
-                        </div>
-                      ))}
+                      {ganttRows.map((row, ri) => {
+                        if (row.type === "category") {
+                          return (
+                            <div key={`cat-${ri}`} className="h-[24px] px-3 flex items-center border-b border-neutral-100 dark:border-neutral-800" style={{ backgroundColor: row.color + "18" }}>
+                              <span className="w-2 h-2 rounded-full mr-1.5 flex-shrink-0" style={{ backgroundColor: row.color }} />
+                              <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: row.color }}>{row.name}</span>
+                            </div>
+                          );
+                        }
+                        const task = row.task;
+                        return (
+                          <div
+                            key={task.id}
+                            className={`h-[32px] px-3 flex items-center border-b border-neutral-100 dark:border-neutral-800 text-xs truncate ${
+                              task.parent_id ? "pl-6" : ""
+                            } ${task.status === "overdue" ? "text-red-600 dark:text-red-400" : "text-neutral-700 dark:text-neutral-300"}`}
+                          >
+                            {task.parent_id && <span className="text-neutral-400 mr-1">&#8627;</span>}
+                            {task.title}
+                          </div>
+                        );
+                      })}
                     </div>
                     {/* Gantt chart area */}
                     <div
@@ -2458,146 +2789,174 @@ export default function ProjectDetailPage() {
                             </div>
                           ))}
                         </div>
-                        {/* Task bars */}
-                        <div style={{ position: "relative" }}>
-                          {/* Weekend columns */}
-                          {days.map(
-                            (d, i) =>
-                              d.isWeekend && (
-                                <div
-                                  key={`w-${i}`}
-                                  className="absolute top-0 bottom-0 bg-neutral-50 dark:bg-neutral-800/30"
-                                  style={{ left: i * dayWidth, width: dayWidth, height: sortedTasks.length * rowHeight }}
-                                />
-                              )
-                          )}
-                          {/* Today line */}
-                          {todayOffset >= 0 && todayOffset < totalDays && (
-                            <div
-                              className="absolute top-0 w-px bg-red-500 z-10"
-                              style={{
-                                left: todayOffset * dayWidth + dayWidth / 2,
-                                height: sortedTasks.length * rowHeight,
-                                borderLeft: "1px dashed rgb(239 68 68)",
-                              }}
-                            />
-                          )}
-                          {/* Milestone diamonds */}
-                          {milestones.map((ms) => {
-                            const msOffset = Math.floor(
-                              (new Date(ms.date).getTime() - minDate.getTime()) / dayMs
-                            );
-                            if (msOffset < 0 || msOffset >= totalDays) return null;
-                            return (
-                              <div
-                                key={`ms-${ms.id}`}
-                                className="absolute z-10 text-amber-500 dark:text-amber-400"
-                                style={{
-                                  left: msOffset * dayWidth + dayWidth / 2 - 6,
-                                  top: -2,
-                                }}
-                                title={ms.title}
-                              >
-                                <span className="text-sm">&#9670;</span>
-                              </div>
-                            );
-                          })}
-                          {/* Task rows */}
-                          {sortedTasks.map((task) => {
-                            const startOffset = task.start_date
-                              ? Math.floor((new Date(task.start_date).getTime() - minDate.getTime()) / dayMs)
-                              : 0;
-                            const endOffset = task.end_date
-                              ? Math.floor((new Date(task.end_date).getTime() - minDate.getTime()) / dayMs)
-                              : startOffset;
-                            const barWidth = Math.max((endOffset - startOffset + 1) * dayWidth - 4, 8);
+                        {/* Task bars with category rows */}
+                        {(() => {
+                          // Calculate total chart height considering category rows
+                          const catRowCount = ganttRows.filter((r) => r.type === "category").length;
+                          const taskRowCount = ganttRows.filter((r) => r.type === "task").length;
+                          const totalChartHeight = catRowCount * categoryRowHeight + taskRowCount * rowHeight;
 
-                            const barColors: Record<string, string> = {
-                              planned: "bg-blue-400 dark:bg-blue-600",
-                              in_progress: "bg-amber-400 dark:bg-amber-600",
-                              done: "bg-green-400 dark:bg-green-600",
-                              overdue: "bg-red-400 dark:bg-red-600",
-                            };
+                          // Calculate Y offset for each ganttRow
+                          const rowYOffsets: number[] = [];
+                          let yAccum = 0;
+                          for (const row of ganttRows) {
+                            rowYOffsets.push(yAccum);
+                            yAccum += row.type === "category" ? categoryRowHeight : rowHeight;
+                          }
 
-                            return (
-                              <div
-                                key={task.id}
-                                className="border-b border-neutral-100 dark:border-neutral-800 relative"
-                                style={{ height: rowHeight }}
-                              >
-                                {/* Task bar */}
-                                <div
-                                  className={`absolute top-1.5 h-5 rounded-sm ${barColors[task.status] || barColors.planned} opacity-80 hover:opacity-100 cursor-default`}
-                                  style={{
-                                    left: startOffset * dayWidth + 2,
-                                    width: barWidth,
-                                  }}
-                                  title={`${task.title} (${task.start_date} ~ ${task.end_date})`}
-                                >
-                                  {/* Progress fill */}
-                                  {task.progress_pct > 0 && task.progress_pct < 100 && (
+                          return (
+                            <div style={{ position: "relative", height: totalChartHeight }}>
+                              {/* Weekend columns */}
+                              {days.map(
+                                (d, i) =>
+                                  d.isWeekend && (
                                     <div
-                                      className="absolute inset-y-0 left-0 bg-white/30 rounded-l-sm"
-                                      style={{ width: `${task.progress_pct}%` }}
+                                      key={`w-${i}`}
+                                      className="absolute top-0 bottom-0 bg-neutral-50 dark:bg-neutral-800/30"
+                                      style={{ left: i * dayWidth, width: dayWidth, height: totalChartHeight }}
                                     />
-                                  )}
-                                  {barWidth > 60 && (
-                                    <span className="absolute inset-0 flex items-center px-1 text-[9px] text-white font-medium truncate">
-                                      {task.title}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {/* Dependency arrows (simple SVG lines) */}
-                          <svg
-                            className="absolute top-0 left-0 pointer-events-none"
-                            style={{ width: totalDays * dayWidth, height: sortedTasks.length * rowHeight }}
-                          >
-                            {sortedTasks.map((task) =>
-                              task.depends_on.map((depId) => {
-                                const depIdx = sortedTasks.findIndex((t2) => t2.id === depId);
-                                const taskIdx = sortedTasks.indexOf(task);
-                                if (depIdx < 0) return null;
-                                const depTask = sortedTasks[depIdx];
-                                const depEndOffset = depTask.end_date
-                                  ? Math.floor((new Date(depTask.end_date).getTime() - minDate.getTime()) / dayMs)
-                                  : 0;
-                                const taskStartOffset = task.start_date
+                                  )
+                              )}
+                              {/* Today line */}
+                              {todayOffset >= 0 && todayOffset < totalDays && (
+                                <div
+                                  className="absolute top-0 w-px bg-red-500 z-10"
+                                  style={{
+                                    left: todayOffset * dayWidth + dayWidth / 2,
+                                    height: totalChartHeight,
+                                    borderLeft: "1px dashed rgb(239 68 68)",
+                                  }}
+                                />
+                              )}
+                              {/* Milestone diamonds */}
+                              {milestones.map((ms) => {
+                                const msOffset = Math.floor(
+                                  (new Date(ms.date).getTime() - minDate.getTime()) / dayMs
+                                );
+                                if (msOffset < 0 || msOffset >= totalDays) return null;
+                                return (
+                                  <div
+                                    key={`ms-${ms.id}`}
+                                    className="absolute z-10 text-amber-500 dark:text-amber-400"
+                                    style={{
+                                      left: msOffset * dayWidth + dayWidth / 2 - 6,
+                                      top: -2,
+                                    }}
+                                    title={ms.title}
+                                  >
+                                    <span className="text-sm">&#9670;</span>
+                                  </div>
+                                );
+                              })}
+                              {/* Category header rows + Task bar rows */}
+                              {ganttRows.map((row, ri) => {
+                                if (row.type === "category") {
+                                  return (
+                                    <div
+                                      key={`cat-bar-${ri}`}
+                                      className="absolute w-full border-b border-neutral-100 dark:border-neutral-800"
+                                      style={{ top: rowYOffsets[ri], height: categoryRowHeight, backgroundColor: row.color + "10" }}
+                                    />
+                                  );
+                                }
+                                const task = row.task;
+                                const startOffset = task.start_date
                                   ? Math.floor((new Date(task.start_date).getTime() - minDate.getTime()) / dayMs)
                                   : 0;
+                                const endOffset = task.end_date
+                                  ? Math.floor((new Date(task.end_date).getTime() - minDate.getTime()) / dayMs)
+                                  : startOffset;
+                                const barWidth = Math.max((endOffset - startOffset + 1) * dayWidth - 4, 8);
 
-                                const x1 = (depEndOffset + 1) * dayWidth;
-                                const y1 = depIdx * rowHeight + rowHeight / 2;
-                                const x2 = taskStartOffset * dayWidth + 2;
-                                const y2 = taskIdx * rowHeight + rowHeight / 2;
+                                const barColors: Record<string, string> = {
+                                  planned: "bg-blue-400 dark:bg-blue-600",
+                                  in_progress: "bg-amber-400 dark:bg-amber-600",
+                                  done: "bg-green-400 dark:bg-green-600",
+                                  overdue: "bg-red-400 dark:bg-red-600",
+                                };
 
                                 return (
-                                  <g key={`${task.id}-${depId}`}>
-                                    <line
-                                      x1={x1}
-                                      y1={y1}
-                                      x2={x2}
-                                      y2={y2}
-                                      stroke="rgb(156, 163, 175)"
-                                      strokeWidth="1"
-                                      strokeDasharray="3,2"
-                                    />
-                                    {/* Arrow head */}
-                                    <polygon
-                                      points={`${x2},${y2} ${x2 - 4},${y2 - 3} ${x2 - 4},${y2 + 3}`}
-                                      fill="rgb(156, 163, 175)"
-                                    />
-                                  </g>
+                                  <div
+                                    key={task.id}
+                                    className="absolute border-b border-neutral-100 dark:border-neutral-800"
+                                    style={{ top: rowYOffsets[ri], height: rowHeight, width: "100%" }}
+                                  >
+                                    {/* Task bar */}
+                                    <div
+                                      className={`absolute top-1.5 h-5 rounded-sm ${barColors[task.status] || barColors.planned} opacity-80 hover:opacity-100 cursor-default`}
+                                      style={{
+                                        left: startOffset * dayWidth + 2,
+                                        width: barWidth,
+                                      }}
+                                      title={`${task.title} (${task.start_date} ~ ${task.end_date})`}
+                                    >
+                                      {/* Progress fill */}
+                                      {task.progress_pct > 0 && task.progress_pct < 100 && (
+                                        <div
+                                          className="absolute inset-y-0 left-0 bg-white/30 rounded-l-sm"
+                                          style={{ width: `${task.progress_pct}%` }}
+                                        />
+                                      )}
+                                      {barWidth > 60 && (
+                                        <span className="absolute inset-0 flex items-center px-1 text-[9px] text-white font-medium truncate">
+                                          {task.title}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 );
-                              })
-                            )}
-                          </svg>
-                        </div>
+                              })}
+                              {/* Dependency arrows */}
+                              <svg
+                                className="absolute top-0 left-0 pointer-events-none"
+                                style={{ width: totalDays * dayWidth, height: totalChartHeight }}
+                              >
+                                {ganttRows.map((row, ri) => {
+                                  if (row.type !== "task") return null;
+                                  const task = row.task;
+                                  return task.depends_on.map((depId) => {
+                                    const depRowIdx = ganttRows.findIndex((r) => r.type === "task" && r.task.id === depId);
+                                    if (depRowIdx < 0) return null;
+                                    const depTask = (ganttRows[depRowIdx] as { type: "task"; task: ScheduleTask }).task;
+                                    const depEndOffset = depTask.end_date
+                                      ? Math.floor((new Date(depTask.end_date).getTime() - minDate.getTime()) / dayMs)
+                                      : 0;
+                                    const taskStartOffset = task.start_date
+                                      ? Math.floor((new Date(task.start_date).getTime() - minDate.getTime()) / dayMs)
+                                      : 0;
+
+                                    const x1 = (depEndOffset + 1) * dayWidth;
+                                    const y1 = rowYOffsets[depRowIdx] + rowHeight / 2;
+                                    const x2 = taskStartOffset * dayWidth + 2;
+                                    const y2 = rowYOffsets[ri] + rowHeight / 2;
+
+                                    return (
+                                      <g key={`${task.id}-${depId}`}>
+                                        <line
+                                          x1={x1}
+                                          y1={y1}
+                                          x2={x2}
+                                          y2={y2}
+                                          stroke="rgb(156, 163, 175)"
+                                          strokeWidth="1"
+                                          strokeDasharray="3,2"
+                                        />
+                                        <polygon
+                                          points={`${x2},${y2} ${x2 - 4},${y2 - 3} ${x2 - 4},${y2 + 3}`}
+                                          fill="rgb(156, 163, 175)"
+                                        />
+                                      </g>
+                                    );
+                                  });
+                                })}
+                              </svg>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
+                </div>
                 </div>
               );
             })()

@@ -1017,6 +1017,7 @@ class ScheduleTaskCreateRequest(BaseModel):
     status: str = "planned"
     depends_on: list[str] = []
     parent_id: str = ""
+    category: str = ""
     progress_pct: int = 0
 
 
@@ -1029,7 +1030,13 @@ class ScheduleTaskUpdateRequest(BaseModel):
     status: str | None = None
     depends_on: list[str] | None = None
     parent_id: str | None = None
+    category: str | None = None
     progress_pct: int | None = None
+
+
+class CategoryCreateRequest(BaseModel):
+    name: str
+    color: str = "#6b7280"
 
 
 class ScheduleReorderRequest(BaseModel):
@@ -1068,10 +1075,16 @@ def create_schedule_task(project_name: str, body: ScheduleTaskCreateRequest):
 def update_schedule_task(project_name: str, task_id: str, body: ScheduleTaskUpdateRequest):
     """Update a schedule task."""
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
-    task = schedule_service.update_task(project_name, task_id, updates)
-    if task is None:
+    result = schedule_service.update_task(project_name, task_id, updates)
+    if result is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return task
+    # Dependency enforcement returns error dict instead of task
+    if isinstance(result, dict) and result.get("error") == "predecessor_not_done":
+        raise HTTPException(
+            status_code=409,
+            detail="Predecessor tasks must be completed first",
+        )
+    return result
 
 
 @app.delete("/api/projects/{project_name}/schedule/tasks/{task_id}")
@@ -1111,6 +1124,21 @@ def delete_milestone(project_name: str, ms_id: str):
     success = schedule_service.delete_milestone(project_name, ms_id)
     if not success:
         raise HTTPException(status_code=404, detail="Milestone not found")
+    return {"success": True}
+
+
+@app.post("/api/projects/{project_name}/schedule/categories")
+def create_category(project_name: str, body: CategoryCreateRequest):
+    """Create a new schedule category."""
+    return schedule_service.create_category(project_name, body.name, body.color)
+
+
+@app.delete("/api/projects/{project_name}/schedule/categories/{category_name}")
+def delete_category(project_name: str, category_name: str):
+    """Delete a schedule category."""
+    success = schedule_service.delete_category(project_name, category_name)
+    if not success:
+        raise HTTPException(status_code=404, detail="Category not found")
     return {"success": True}
 
 

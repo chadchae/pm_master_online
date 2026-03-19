@@ -392,7 +392,7 @@ export default function DashboardPage() {
                   className={`flex flex-col rounded-xl border transition-colors ${
                     isDragOver
                       ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30"
-                      : "border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900"
+                      : "border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900/60"
                   }`}
                   onDragOver={(e) => handleDragOver(e, stage.folder)}
                   onDragLeave={handleDragLeave}

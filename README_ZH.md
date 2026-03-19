@@ -18,6 +18,21 @@ PM Master Online 专为在同一界面中同时支持软件开发和学术研究
 
 在日常使用中,您可以在看板视图中一目了然地看到所有项目的当前状态,按类型筛选关注特定领域的工作,并通过拖拽快速推进项目阶段。每个项目都配备了完整的工具集:用甘特图规划时间线和里程碑,用问题跟踪器记录和解决技术难题,用待办看板管理日常任务,用 Markdown 编辑器撰写和维护项目文档。侧边栏的快速笔记功能让灵感不再遗失,讨论时间线则提供了跨项目的沟通记录全景视图。人员管理模块帮助您维护项目相关联系人的完整档案,从合作者到导师再到审稿人,所有关系一目了然。无论您是独立开发者管理多个开源项目,还是研究生同时推进论文和实验代码,PM Master Online 都能为您提供一个统一、高效且完全私密的项目管理环境。它将散落在各处的项目文件夹转变为一个结构化的、可视化的工作空间,让您专注于真正重要的事情——创造和研究本身。从今天开始,用一条命令开启您的本地项目管理之旅。
 
+## 截图
+
+> 截图文件位于 `docs/screenshots/` 文件夹中。
+
+| | | | |
+|:---:|:---:|:---:|:---:|
+| ![仪表盘看板](docs/screenshots/01-dashboard-kanban-dark.png) | ![创意卡片](docs/screenshots/02-ideas-card-dark.png) | ![创意列表](docs/screenshots/03-ideas-list-dark.png) | ![文档编辑器](docs/screenshots/04-document-editor-dark.png) |
+| 仪表盘看板 (暗色) | 创意卡片 | 创意列表视图 | 文档编辑器 |
+| ![时间线](docs/screenshots/05-timeline-dark.png) | ![服务器](docs/screenshots/06-servers-dark.png) | ![联系人卡片](docs/screenshots/07-people-card-dark.png) | ![快速笔记](docs/screenshots/08-people-quicknote-dark.png) |
+| 讨论时间线 | 服务器控制 | 联系人卡片 (暗色) | 快速笔记面板 |
+| ![联系人编辑](docs/screenshots/09-people-modal-dark.png) | ![联系人亮色](docs/screenshots/10-people-card-light.png) | ![项目设置](docs/screenshots/11-project-settings-dark.png) | ![工作指令](docs/screenshots/12-work-instructions-dark.png) |
+| 联系人编辑对话框 | 联系人卡片 (亮色) | 项目设置 | 工作指令 |
+| ![待办看板](docs/screenshots/13-todo-kanban-dark.png) | ![问题](docs/screenshots/14-issues-dark.png) | ![日程表](docs/screenshots/15-schedule-table-dark.png) | ![甘特图](docs/screenshots/16-schedule-gantt-dark.png) |
+| 待办看板 | 问题追踪器 | 日程表 | 甘特图 |
+
 ## 主要功能
 
 ### 仪表盘

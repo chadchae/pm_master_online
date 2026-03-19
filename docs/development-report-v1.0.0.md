@@ -1,146 +1,146 @@
-# PM Master v1.0.0 Development Report
+# PM Master v1.0.0 개발 보고서
 
-## Overview
+## 개요
 
-| Item | Value |
+| 항목 | 값 |
 |------|-------|
-| Project | PM Master (Local + Online) |
-| Version | v1.0.0 |
-| Development Period | 2026-03-19 21:31 ~ 2026-03-20 05:56 (CST) |
-| Total Development Time | ~8.5 hours |
-| Developer | Chad (Chungil Chae) |
-| AI Assistant | Claude Opus 4 via Claude Code |
+| 프로젝트 | PM Master (로컬 + 온라인) |
+| 버전 | v1.0.0 |
+| 개발 기간 | 2026-03-19 21:31 ~ 2026-03-20 05:56 (CST) |
+| 총 개발 시간 | ~8.5시간 |
+| 개발자 | Chad (Chungil Chae) |
+| AI 어시스턴트 | Claude Code를 통한 Claude Opus 4 |
 
-## Codebase Statistics
+## 코드베이스 통계
 
-| Metric | Value |
+| 지표 | 값 |
 |--------|-------|
-| Total Commits | 53 |
-| Frontend Code | 11,767 lines (31 files, TypeScript/React) |
-| Backend Code | 4,415 lines (12 files, Python/FastAPI) |
-| Total Code | 16,182 lines (43 files) |
-| Productivity | ~1,904 lines/hour, ~6.2 commits/hour |
+| 총 커밋 수 | 53 |
+| 프론트엔드 코드 | 11,767줄 (31개 파일, TypeScript/React) |
+| 백엔드 코드 | 4,415줄 (12개 파일, Python/FastAPI) |
+| 총 코드 | 16,182줄 (43개 파일) |
+| 생산성 | ~1,904줄/시간, ~6.2 커밋/시간 |
 
-## Cost Analysis
+## 비용 분석
 
-### AI Development Cost (Claude Code)
+### AI 개발 비용 (Claude Code)
 
-| Item | Estimate |
+| 항목 | 추정치 |
 |------|----------|
-| Total Tokens | ~3M-5M (input + output combined) |
-| Model | Claude Opus 4 |
-| Pricing | Input $15/M tokens, Output $75/M tokens |
-| Estimated Cost | $80-$150 |
+| 총 토큰 수 | ~300만 ~500만 (입력 + 출력 합계) |
+| 모델 | Claude Opus 4 |
+| 가격 | 입력 $15/백만 토큰, 출력 $75/백만 토큰 |
+| 예상 비용 | $80 ~ $150 |
 
-### Comparison: Traditional Development
+### 비교: 기존 개발 방식
 
-| Item | Estimate |
+| 항목 | 추정치 |
 |------|----------|
-| Equivalent Human Effort | 16,000 lines x 50 lines/hour = 320 hours (8 weeks) |
-| Full-stack Developer Rate | $50/hour |
-| Traditional Cost | $16,000 |
-| **Cost Reduction** | **99%+** |
-| **Time Reduction** | **8.5 hours vs 320 hours (97%)** |
+| 이에 상응하는 인력 투입 | 16,000줄 x 50줄/시간 = 320시간 (8주) |
+| 풀스택 개발자 시급 | $50/시간 |
+| 기존 비용 | $16,000 |
+| **비용 절감** | **99%+** |
+| **시간 절감** | **8.5시간 vs 320시간 (97%)** |
 
-## Tech Stack
+## 기술 스택
 
-| Layer | Technology |
+| 계층 | 기술 |
 |-------|-----------|
-| Backend | Python 3.12 / FastAPI |
-| Frontend | Next.js 15 / React 19 / TypeScript / TailwindCSS |
-| Data Storage | Local JSON files (no database) |
-| Auth | bcrypt + PyJWT |
-| Editor | @uiw/react-md-editor |
-| Markdown | @uiw/react-markdown-preview |
-| Terminal | @xterm/xterm + WebSocket PTY |
-| Icons | Lucide React |
-| Notifications | react-hot-toast |
-| Metadata | YAML frontmatter (pyyaml) |
+| 백엔드 | Python 3.12 / FastAPI |
+| 프론트엔드 | Next.js 15 / React 19 / TypeScript / TailwindCSS |
+| 데이터 저장 | 로컬 JSON 파일 (데이터베이스 없음) |
+| 인증 | bcrypt + PyJWT |
+| 에디터 | @uiw/react-md-editor |
+| 마크다운 | @uiw/react-markdown-preview |
+| 터미널 | @xterm/xterm + WebSocket PTY |
+| 아이콘 | Lucide React |
+| 알림 | react-hot-toast |
+| 메타데이터 | YAML 프론트매터 (pyyaml) |
 
-## Features Delivered in v1.0.0
+## v1.0.0에 구현된 기능
 
-### Core
-- 7-stage project lifecycle (Idea → Initiation → Development → Testing → Completed → Archived → Discarded)
-- Dashboard kanban board + list view with multi-column sorting
-- 4 dashboard theme variations (A/B/C/D) for light and dark modes
-- Project detail with 6 tabs (Settings, Documents, Todo, Issues, Schedule, Work Orders)
+### 핵심
+- 7단계 프로젝트 라이프사이클 (아이디어 → 시작 → 개발 → 테스트 → 완료 → 보관 → 폐기)
+- 대시보드 칸반 보드 + 다중 열 정렬이 가능한 목록 보기
+- 라이트 및 다크 모드용 4가지 대시보드 테마 변형 (A/B/C/D)
+- 6개 탭(설정, 문서, 할 일, 이슈, 일정, 작업 지시서)이 포함된 프로젝트 상세 정보
 
-### Schedule / Gantt
-- Task CRUD with assignee, dates, status, categories, dependencies
-- Gantt chart with category tracks, dependency arrows, today line
-- Milestones with diamond markers, edit/delete
-- 30-color category palette with auto-assignment
-- Parent task auto-date calculation
+### 일정 / 간트 차트
+- 담당자, 날짜, 상태, 카테고리, 종속성을 포함한 작업 CRUD
+- 카테고리 트랙, 종속성 화살표, 오늘 라인이 포함된 간트 차트
+- 다이아몬드 마커가 있는 마일스톤, 편집/삭제
+- 자동 할당이 적용된 30가지 색상의 카테고리 팔레트
+- 상위 작업의 날짜 자동 계산
 
-### Collaboration
-- People directory with card/list view, inline editing
-- Issue tracker with comments, timeline, status management
-- Todo kanban (3 columns) with priority, assignee, due dates
+### 협업
+- 카드/목록 보기와 인라인 편집이 가능한 사용자 디렉토리
+- 댓글, 타임라인, 상태 관리가 포함된 이슈 트래커
+- 우선순위, 담당자, 마감일이 포함된 할 일 칸반(3열)
 
-### Server Control
-- Card view with dual port status (BE/FE)
-- Start/Stop/Restart per server + bulk actions
-- Inline terminal log panel with auto-refresh
+### 서버 제어
+- 이중 포트 상태(BE/FE)가 표시되는 카드 뷰
+- 서버별 시작/중지/재시작 + 일괄 작업
+- 자동 새로고침 기능이 있는 인라인 터미널 로그 패널
 
-### Document Management
-- Markdown editor with split preview
-- Markdown rendered view for .md files
-- Print/PDF export, MD/CSV download
-- Folder navigation with breadcrumb
+### 문서 관리
+- 분할 미리보기가 포함된 마크다운 편집기
+- .md 파일용 마크다운 렌더링 뷰
+- 인쇄/PDF 내보내기, MD/CSV 다운로드
+- 브레드크럼을 지원하는 폴더 탐색
 
 ### UI/UX
-- In-app modal dialogs (no browser prompt/confirm)
-- Dark/light theme with next-themes
-- Multi-language (Korean/English, 280+ translation keys)
-- Type filter with management (rename/delete across projects)
-- Filter persistence via localStorage
-- Drag-and-drop card reordering
+- 앱 내 모달 대화상자 (브라우저 프롬프트/확인 창 없음)
+- next-themes를 활용한 다크/라이트 테마
+- 다국어 지원 (한국어/영어, 280개 이상의 번역 키)
+- 관리 기능(프로젝트 간 이름 변경/삭제)이 포함된 유형 필터
+- localStorage를 통한 필터 저장
+- 드래그 앤 드롭 카드 재정렬
 
-## Architecture
+## 아키텍처
 
 ```
 pm-master-{local|online}/
 ├── backend/
-│   ├── main.py                     # FastAPI app + all endpoints
-│   ├── services/
-│   │   ├── scanner_service.py      # Project scanning and metadata
-│   │   ├── schedule_service.py     # Schedule/gantt/milestone/category
-│   │   ├── todo_service.py         # Todo kanban
-│   │   ├── issue_service.py        # Issue tracker
-│   │   ├── subtask_service.py      # Project subtasks
-│   │   ├── document_service.py     # Document file management
-│   │   ├── server_service.py       # Server control
-│   │   ├── common_folder_service.py # Notes/learning/issues
-│   │   ├── people_service.py       # People directory
-│   │   └── auth_service.py         # JWT authentication
-│   ├── data/                       # JSON data (gitignored)
-│   └── requirements.txt
+│ ├── main.py # FastAPI 앱 + 모든 엔드포인트
+│ ├── services/
+│ │ ├── scanner_service.py # 프로젝트 스캔 및 메타데이터
+│ │ ├── schedule_service.py # 일정/간트차트/마일스톤/카테고리
+│ │ ├── todo_service.py # 할 일 칸반
+│ │ ├── issue_service.py # 이슈 트래커
+│ │ ├── subtask_service.py # 프로젝트 하위 작업
+│ │ ├── document_service.py # 문서 파일 관리
+│ │ ├── server_service.py # 서버 제어
+│ │ ├── common_folder_service.py # 메모/학습/이슈
+│ │ ├── people_service.py # 사용자 디렉터리
+│ │ └── auth_service.py # JWT 인증
+│ ├── data/ # JSON 데이터 (gitignored)
+│ └── requirements.txt
 ├── frontend/
-│   ├── src/
-│   │   ├── app/dashboard/          # All pages
-│   │   ├── components/             # Reusable components
-│   │   └── lib/                    # API, stages, i18n, auth
-│   └── package.json
+│ ├── src/
+│ │ ├── app/dashboard/ # 모든 페이지
+│ │ ├── components/ # 재사용 가능한 컴포넌트
+│ │ └── lib/ # API, 스테이지, i18n, 인증
+│ └── package.json
 ├── docs/
-├── run.sh                          # Server control script
-├── setup.sh                        # One-command installation
+├── run.sh # 서버 제어 스크립트
+├── setup.sh # 원클릭 설치
 ├── CHANGELOG.md
 ├── README.md / README_KO.md / README_ZH.md
 └── .gitignore
 ```
 
-## Key Decisions & Learnings
+## 주요 결정 사항 및 교훈
 
-1. **Filesystem as database**: No DB needed — `~/Projects/` folder structure IS the project state
-2. **Gantt today line**: DOM order matters more than z-index for overlapping elements
-3. **Duration calculation**: Inclusive (end - start + 1) for intuitive day counting
-4. **Browser dialogs**: All prompt()/confirm() replaced with AppDialogs components
-5. **Type vs Category**: Types are project-level metadata, categories are schedule-level groupings
-6. **Filter persistence**: localStorage survives navigation without prop drilling
-7. **Port management**: lsof-only approach (no file-based tracking) prevents stale port issues
+1. **파일 시스템이 곧 데이터베이스**: DB 불필요 — `~/Projects/` 폴더 구조 자체가 프로젝트 상태
+2. **간트 차트의 오늘 라인**: 겹치는 요소의 경우 z-index보다 DOM 순서가 더 중요
+3. **기간 계산**: 직관적인 일 수 계산을 위해 포함 방식(종료 - 시작 + 1) 적용
+4. **브라우저 대화상자**: 모든 prompt()/confirm()을 AppDialogs 컴포넌트로 대체
+5. **유형(Type) 대 카테고리(Category)**: 유형은 프로젝트 수준의 메타데이터, 카테고리는 일정 수준의 그룹화
+6. **필터 지속성**: prop 드릴링 없이도 localStorage가 네비게이션 후에도 유지됨
+7. **포트 관리**: lsof 전용 접근 방식(파일 기반 추적 없음)으로 오래된 포트 문제 방지
 
-## Branching Strategy (v1.0.0+)
+## 브랜치 전략 (v1.0.0+)
 
-- **PM Master Local** (pm-master-local): Personal desktop tool, filesystem access
-- **PM Master Online** (pm-master-online): Multi-user collaboration, cloud-ready
-- No more full cp sync — individual feature sync only for shared bugs/features
+- **PM Master Local** (pm-master-local): 개인용 데스크톱 도구, 파일 시스템 액세스
+- **PM Master Online** (pm-master-online): 다중 사용자 협업, 클라우드 지원
+- 전체 cp 동기화 없음 — 공유 버그/기능에 대한 개별 기능 동기화만 수행

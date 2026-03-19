@@ -16,10 +16,12 @@ import {
   Link2,
   LayoutGrid,
   List,
+  Check,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import toast from "react-hot-toast";
 import { useLocale } from "@/lib/i18n";
+import { ConfirmDialog } from "@/components/AppDialogs";
 import { ListExportBar, generateMD, generateCSV, downloadFile, printList } from "@/components/ListExportBar";
 
 // Types
@@ -477,6 +479,77 @@ export default function PeoplePage() {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [sortKey, setSortKey] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // Inline edit states for list view
+  const [listEditingId, setListEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [editAffiliation, setEditAffiliation] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editRelationship, setEditRelationship] = useState("");
+  // ConfirmDialog state for delete
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
+  const startListEdit = (person: Person) => {
+    setListEditingId(person.id);
+    setEditName(person.name);
+    setEditRole(person.role || "");
+    setEditAffiliation(person.affiliation || "");
+    setEditEmail(person.email || "");
+    setEditRelationship(person.relationship || "colleague");
+    setEditingId(null);
+  };
+
+  const cancelListEdit = () => {
+    setListEditingId(null);
+  };
+
+  const saveListEdit = async () => {
+    if (!listEditingId || !editName.trim()) return;
+    const person = people.find((p) => p.id === listEditingId);
+    if (!person) return;
+    setSaving(true);
+    try {
+      const payload = {
+        name: editName,
+        name_ko: person.name_ko,
+        role: editRole,
+        affiliation: editAffiliation,
+        email: editEmail,
+        expertise: person.expertise.join(", "),
+        relationship: editRelationship,
+        notes: person.notes,
+        connections: person.connections || [],
+      };
+      const processedPayload = {
+        ...payload,
+        expertise: payload.expertise
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      };
+      await apiFetch(`/api/people/${listEditingId}`, {
+        method: "PUT",
+        body: JSON.stringify(processedPayload),
+      });
+      toast.success(t("toast.personUpdated"));
+      setListEditingId(null);
+      fetchPeople();
+    } catch {
+      toast.error(t("toast.failedToUpdatePerson"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDeletePerson = (person: Person) => {
+    setConfirmDialog({
+      message: `Delete "${person.name}"? This action cannot be undone.`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        handleDelete(person.id);
+      },
+    });
+  };
 
   const toggleSort = (key: string) => {
     if (sortKey === key) {
@@ -798,29 +871,67 @@ export default function PeoplePage() {
                 {sortedPeople.map((person) => {
                   const relColor =
                     RELATIONSHIP_COLORS[person.relationship] || RELATIONSHIP_COLORS.external;
+                  const isEditing = listEditingId === person.id;
+                  const inputClass =
+                    "w-full px-2 py-1 rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500";
                   return (
                     <tr
                       key={person.id}
-                      className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
+                      className={`transition-colors ${isEditing ? "bg-indigo-50/50 dark:bg-indigo-950/20" : "hover:bg-neutral-50 dark:hover:bg-neutral-800/50"}`}
                     >
                       <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-neutral-900 dark:text-white">
-                            {person.name}
-                          </p>
-                          {person.name_ko && (
-                            <p className="text-xs text-neutral-400">{person.name_ko}</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
-                        {person.role || "-"}
-                      </td>
-                      <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
-                        {person.affiliation || "-"}
+                        {isEditing ? (
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className={inputClass}
+                            autoFocus
+                            onKeyDown={(e) => { if (e.key === "Enter") saveListEdit(); if (e.key === "Escape") cancelListEdit(); }}
+                          />
+                        ) : (
+                          <div>
+                            <p className="font-medium text-neutral-900 dark:text-white">
+                              {person.name}
+                            </p>
+                            {person.name_ko && (
+                              <p className="text-xs text-neutral-400">{person.name_ko}</p>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
-                        {person.email ? (
+                        {isEditing ? (
+                          <input
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value)}
+                            className={inputClass}
+                            onKeyDown={(e) => { if (e.key === "Enter") saveListEdit(); if (e.key === "Escape") cancelListEdit(); }}
+                          />
+                        ) : (
+                          <span className="text-neutral-600 dark:text-neutral-400">{person.role || "-"}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <input
+                            value={editAffiliation}
+                            onChange={(e) => setEditAffiliation(e.target.value)}
+                            className={inputClass}
+                            onKeyDown={(e) => { if (e.key === "Enter") saveListEdit(); if (e.key === "Escape") cancelListEdit(); }}
+                          />
+                        ) : (
+                          <span className="text-neutral-600 dark:text-neutral-400">{person.affiliation || "-"}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <input
+                            value={editEmail}
+                            onChange={(e) => setEditEmail(e.target.value)}
+                            className={inputClass}
+                            onKeyDown={(e) => { if (e.key === "Enter") saveListEdit(); if (e.key === "Escape") cancelListEdit(); }}
+                          />
+                        ) : person.email ? (
                           <a
                             href={`mailto:${person.email}`}
                             className="text-neutral-600 dark:text-neutral-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
@@ -832,13 +943,23 @@ export default function PeoplePage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {person.relationship && (
+                        {isEditing ? (
+                          <select
+                            value={editRelationship}
+                            onChange={(e) => setEditRelationship(e.target.value)}
+                            className={inputClass}
+                          >
+                            {RELATIONSHIP_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : person.relationship ? (
                           <span
                             className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${relColor}`}
                           >
                             {person.relationship}
                           </span>
-                        )}
+                        ) : null}
                       </td>
                       <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">
                         {person.projects.length > 0
@@ -847,20 +968,42 @@ export default function PeoplePage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => setEditingId(person.id)}
-                            className="p-1.5 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded transition-colors"
-                            title="Edit"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(person.id)}
-                            className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={saveListEdit}
+                                disabled={saving || !editName.trim()}
+                                className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 rounded transition-colors disabled:opacity-50"
+                                title="Save"
+                              >
+                                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                onClick={cancelListEdit}
+                                className="p-1.5 text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => startListEdit(person)}
+                                className="p-1.5 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded transition-colors"
+                                title="Edit"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => confirmDeletePerson(person)}
+                                className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -871,6 +1014,14 @@ export default function PeoplePage() {
           </div>
         </>
       )}
+      <ConfirmDialog
+        open={!!confirmDialog}
+        message={confirmDialog?.message || ""}
+        variant="danger"
+        confirmLabel="Delete"
+        onConfirm={() => { confirmDialog?.onConfirm(); }}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </div>
   );
 }

@@ -2269,17 +2269,26 @@ export default function ProjectDetailPage() {
                     <button
                       key={st.id}
                       onClick={() => {
-                        setNewSchedDepends((prev) =>
-                          prev.includes(st.id) ? prev.filter((d) => d !== st.id) : [...prev, st.id]
-                        );
+                        if (!newSchedDepends.includes(st.id)) {
+                          setNewSchedDepends((prev) => [...prev, st.id]);
+                        }
                       }}
-                      className={`px-2 py-0.5 text-xs rounded-full border ${
+                      className={`px-2 py-0.5 text-xs rounded-full border flex items-center gap-1 ${
                         newSchedDepends.includes(st.id)
                           ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300"
                           : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400"
                       }`}
                     >
                       {st.title}
+                      {newSchedDepends.includes(st.id) && (
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNewSchedDepends((prev) => prev.filter((d) => d !== st.id));
+                          }}
+                          className="hover:text-red-500 cursor-pointer"
+                        >×</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -2448,19 +2457,28 @@ export default function ProjectDetailPage() {
                                 </select>
                               </td>
                               <td className="px-2 py-1">
-                                <select value={editSchedCategory} onChange={(e) => setEditSchedCategory(e.target.value)} className="text-xs px-2 py-1 rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white">
+                                <select value={editSchedCategory} onChange={(e) => {
+                                  if (e.target.value === "__new__") {
+                                    setShowNewCategory(true);
+                                    setEditSchedCategory("");
+                                  } else {
+                                    setEditSchedCategory(e.target.value);
+                                  }
+                                }} className="text-xs px-2 py-1 rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white">
                                   <option value="">--</option>
                                   {categories.map((cat) => (
                                     <option key={cat.name} value={cat.name}>{cat.name}</option>
                                   ))}
+                                  <option value="__new__">+ {t("schedule.newCategory")}</option>
                                 </select>
                               </td>
                               <td className="px-3 py-2 text-xs text-neutral-400">-</td>
                               <td className="px-2 py-1">
                                 <div className="flex flex-wrap gap-0.5 max-w-[140px]">
                                   {scheduleTasks.filter((st) => st.id !== task.id).map((st) => (
-                                    <button key={st.id} onClick={() => setEditSchedDepends((prev) => prev.includes(st.id) ? prev.filter((d) => d !== st.id) : [...prev, st.id])} className={`px-1.5 py-0 text-[10px] rounded-full border ${editSchedDepends.includes(st.id) ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 text-indigo-700 dark:text-indigo-300" : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
+                                    <button key={st.id} onClick={() => { if (!editSchedDepends.includes(st.id)) setEditSchedDepends((prev) => [...prev, st.id]); }} className={`px-1.5 py-0 text-[10px] rounded-full border flex items-center gap-0.5 ${editSchedDepends.includes(st.id) ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 text-indigo-700 dark:text-indigo-300" : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
                                       {st.title.slice(0, 10)}
+                                      {editSchedDepends.includes(st.id) && <span onClick={(e) => { e.stopPropagation(); setEditSchedDepends((prev) => prev.filter((d) => d !== st.id)); }} className="hover:text-red-500 cursor-pointer">×</span>}
                                     </button>
                                   ))}
                                 </div>
@@ -3023,13 +3041,21 @@ export default function ProjectDetailPage() {
                 </label>
                 <select
                   value={metaDraft.유형 || ""}
-                  onChange={(e) => setMetaDraft((d) => ({ ...d, 유형: e.target.value }))}
+                  onChange={(e) => {
+                    if (e.target.value === "__custom__") {
+                      const custom = prompt("새 유형 입력:");
+                      if (custom?.trim()) setMetaDraft((d) => ({ ...d, 유형: custom.trim() }));
+                    } else {
+                      setMetaDraft((d) => ({ ...d, 유형: e.target.value }));
+                    }
+                  }}
                   className="w-full px-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
                   <option value="">Not set</option>
                   <option value="개발">개발</option>
                   <option value="연구">연구</option>
                   <option value="연구+개발">연구+개발</option>
+                  <option value="__custom__">+ 직접 입력</option>
                 </select>
               </div>
 

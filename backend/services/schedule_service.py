@@ -100,6 +100,23 @@ def create_task(project_name: str, task_data: dict[str, Any]) -> dict[str, Any]:
         "order": max_order + 1,
     }
 
+    # Auto-adjust start_date based on predecessor end_date + 1
+    if task["depends_on"]:
+        task_map = {t["id"]: t for t in tasks}
+        latest_end = ""
+        for dep_id in task["depends_on"]:
+            dep = task_map.get(dep_id)
+            if dep and dep.get("end_date", "") > latest_end:
+                latest_end = dep["end_date"]
+        if latest_end:
+            from datetime import timedelta
+            dep_end = datetime.strptime(latest_end, "%Y-%m-%d").date()
+            new_start = dep_end + timedelta(days=1)
+            task["start_date"] = str(new_start)
+            if task["end_date"] and task["end_date"] < task["start_date"]:
+                task["end_date"] = task["start_date"]
+            task["duration_days"] = _calc_duration(task["start_date"], task["end_date"])
+
     tasks.append(task)
     data["tasks"] = tasks
     _save_schedule(project_name, data)
@@ -132,8 +149,27 @@ def update_task(
             for key, val in updates.items():
                 if key != "id":
                     task[key] = val
+
+            # Auto-adjust start_date if depends_on changed
+            deps = task.get("depends_on", [])
+            if deps and ("depends_on" in updates or "start_date" not in updates):
+                task_map = {t["id"]: t for t in tasks}
+                latest_end = ""
+                for dep_id in deps:
+                    dep = task_map.get(dep_id)
+                    if dep and dep.get("end_date", "") > latest_end:
+                        latest_end = dep["end_date"]
+                if latest_end:
+                    from datetime import timedelta
+                    dep_end = datetime.strptime(latest_end, "%Y-%m-%d").date()
+                    new_start = dep_end + timedelta(days=1)
+                    if str(new_start) > task.get("start_date", ""):
+                        task["start_date"] = str(new_start)
+                        if task.get("end_date", "") < task["start_date"]:
+                            task["end_date"] = task["start_date"]
+
             # Recalculate duration if dates changed
-            if "start_date" in updates or "end_date" in updates:
+            if "start_date" in updates or "end_date" in updates or "depends_on" in updates:
                 task["duration_days"] = _calc_duration(
                     task.get("start_date", ""),
                     task.get("end_date", ""),

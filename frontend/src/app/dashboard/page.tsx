@@ -4,7 +4,7 @@ import { useEffect, useState, DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, Project, ServerStatus } from "@/lib/api";
 import { STAGES, KANBAN_STAGES, getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
-import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock } from "lucide-react";
+import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock, Pencil, Trash2, Download } from "lucide-react";
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
@@ -359,6 +359,37 @@ export default function DashboardPage() {
                               </p>
                             )}
                           </div>
+                        </div>
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-neutral-100 dark:border-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`); }}
+                            className="p-1 text-neutral-400 hover:text-indigo-500 rounded" title={t("action.edit")}
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`/api/projects/${encodeURIComponent(project.name)}/download`, "_blank");
+                            }}
+                            className="p-1 text-neutral-400 hover:text-blue-500 rounded" title={t("action.download")}
+                          >
+                            <Download className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!confirm(`Delete "${project.metadata?.label || project.name}"?`)) return;
+                              apiFetch(`/api/projects/move`, {
+                                method: "POST",
+                                body: JSON.stringify({ project_name: project.name, from_stage: project.stage, to_stage: "7_discarded", instruction: "" }),
+                              }).then(() => { loadData(); toast.success("Moved to trash"); }).catch(() => toast.error("Failed"));
+                            }}
+                            className="p-1 text-neutral-400 hover:text-red-500 rounded ml-auto" title={t("action.delete")}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
                       </div>
                     ))}

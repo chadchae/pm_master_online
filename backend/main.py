@@ -12,7 +12,7 @@ import termios
 from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
 from services import auth_service, scanner_service, document_service
@@ -1000,6 +1000,36 @@ def reorder_subtasks(project_name: str, body: SubtaskReorderRequest):
     """Reorder subtasks based on ID list."""
     data = subtask_service.reorder_subtasks(project_name, body.ordered_ids)
     return data
+
+
+# --- Download project ---
+
+@app.get("/api/projects/{project_name}/download")
+def download_project(project_name: str):
+    """Download a project as a zip file."""
+    import shutil
+    import tempfile
+
+    project_path = scanner_service._find_project_path(project_name)
+    if project_path is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Create temp zip
+    tmp_dir = tempfile.mkdtemp()
+    zip_base = os.path.join(tmp_dir, project_name)
+
+    try:
+        shutil.make_archive(
+            zip_base, "zip", str(project_path.parent), project_name
+        )
+        zip_path = f"{zip_base}.zip"
+        return FileResponse(
+            zip_path,
+            media_type="application/zip",
+            filename=f"{project_name}.zip",
+        )
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create archive: {e}")
 
 
 # --- People endpoints ---

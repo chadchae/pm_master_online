@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, lazy, Suspense } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { apiFetch, Project, FileItem } from "@/lib/api";
 import { getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
 import {
@@ -38,6 +38,7 @@ import {
   Ban,
   Check,
   Circle,
+  Download,
 } from "lucide-react";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
@@ -49,6 +50,7 @@ import { useLocale } from "@/lib/i18n";
 
 export default function ProjectDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const { t } = useLocale();
   const name = decodeURIComponent(params.name as string);
 
@@ -903,6 +905,30 @@ export default function ProjectDetailPage() {
                 </span>
               )}
             </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1 mb-2 ml-4">
+            <button
+              onClick={() => window.open(`/api/projects/${encodeURIComponent(name)}/download`, "_blank")}
+              className="p-1.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 text-neutral-400 hover:text-blue-500 transition-colors"
+              title={t("action.download")}
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                if (!confirm(`Move "${project.metadata?.label || name}" to trash?`)) return;
+                apiFetch("/api/projects/move", {
+                  method: "POST",
+                  body: JSON.stringify({ project_name: name, from_stage: project.stage, to_stage: "7_discarded", instruction: "" }),
+                }).then(() => { router.push("/dashboard"); toast.success("Moved to trash"); }).catch(() => toast.error("Failed"));
+              }}
+              className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500 transition-colors"
+              title={t("action.delete")}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Summary widgets (right side) */}

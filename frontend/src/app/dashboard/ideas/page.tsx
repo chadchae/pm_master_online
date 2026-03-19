@@ -419,19 +419,19 @@ export default function IdeasPage() {
                 </th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("importance")}>
                   <span className="inline-flex items-center gap-1">
-                    Imp
+                    Importance
                     {sortKey === "importance" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                   </span>
                 </th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("severity")}>
                   <span className="inline-flex items-center gap-1">
-                    Sev
+                    Severity
                     {sortKey === "severity" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                   </span>
                 </th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("urgency")}>
                   <span className="inline-flex items-center gap-1">
-                    Urg
+                    Urgency
                     {sortKey === "urgency" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                   </span>
                 </th>

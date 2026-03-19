@@ -5,7 +5,7 @@
 # ==============================================================================
 
 VERSION="1.2.0"
-PROJECT_NAME="ProjectManager"
+PROJECT_NAME="PMMasterOnline"
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'

@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.0] - 2026-03-20
+
+### Milestone
+- Official v1.0.0 release
+- PM Master Online: Online collaboration-ready project management
+
+### Core Features
+- 7-stage project lifecycle (Idea → Initiation → Development → Testing → Completed → Archived → Discarded)
+- Dashboard with kanban board + list view + 4 theme variations (A/B/C/D for light/dark)
+- Project detail: 6 tabs (Settings, Documents, Todo, Issues, Schedule, Work Orders)
+- Schedule/Gantt with milestones, categories (30-color palette), dependencies, today line
+- Ideas page with card/list view, drag-drop reorder, type filter
+- Server control with card view, dual port status, bulk actions, inline log panel
+- People directory with card/list view, inline edit, sortable columns
+- In-app modal dialogs (ConfirmDialog, PromptDialog, NewProjectDialog)
+- Document viewer with markdown rendering, print/PDF export
+- List export (Print/MD/CSV) for all list views
+- Type management (rename/delete across all projects)
+- Category management (rename/delete with auto-color palette)
+- Multi-language (Korean/English), dark/light themes
+- One-command setup (setup.sh + run.sh)
+
+---
+
 ## v0.3.0 (2026-03-20)
 
 ### Added

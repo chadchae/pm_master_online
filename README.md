@@ -1,10 +1,10 @@
-# Project Manager V2
+# PM Master Online
 
 [Korean](README_KO.md) | [Chinese](README_ZH.md)
 
 > **Local-first Personal Project Hub**
 
-Project Manager V2 is a local-first project manager that manages your entire `~/Projects/` folder from the web. It syncs directly with the filesystem without a database -- your folder structure *is* your project state. Visualize and manage a 7-stage lifecycle from idea to archive with kanban boards, and get per-project gantt charts, issue trackers, todo kanbans, and a markdown document editor. The work instruction system and embedded terminal (xterm.js) integrate directly with Claude Code to power AI-driven development workflows. It handles both research workflows (literature review, analysis, paper writing) and software development in a single interface. With Korean/English i18n, dark/light themes, and one-command setup, all data stays in local JSON files for complete privacy.
+PM Master Online is a local-first project manager that manages your entire `~/Projects/` folder from the web. It syncs directly with the filesystem without a database -- your folder structure *is* your project state. Visualize and manage a 7-stage lifecycle from idea to archive with kanban boards, and get per-project gantt charts, issue trackers, todo kanbans, and a markdown document editor. The work instruction system and embedded terminal (xterm.js) integrate directly with Claude Code to power AI-driven development workflows. It handles both research workflows (literature review, analysis, paper writing) and software development in a single interface. With Korean/English i18n, dark/light themes, and one-command setup, all data stays in local JSON files for complete privacy.
 
 ## Features
 

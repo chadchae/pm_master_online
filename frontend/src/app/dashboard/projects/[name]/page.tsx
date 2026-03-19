@@ -57,7 +57,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [docs, setDocs] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"documents" | "instructions" | "todo" | "issues" | "settings">("documents");
+  const [activeTab, setActiveTab] = useState<"documents" | "instructions" | "todo" | "issues" | "schedule" | "settings">("documents");
   const [newInstruction, setNewInstruction] = useState("");
   const [newChecklist, setNewChecklist] = useState("");
   const [savingInstruction, setSavingInstruction] = useState(false);
@@ -135,7 +135,8 @@ export default function ProjectDetailPage() {
   interface ProjectSummary {
     todo: { total: number; todo: number; in_progress: number; done: number; progress_pct: number };
     issues: { total: number; open: number; resolved: number };
-    schedule: { total: number; upcoming: number; overdue: number };
+    schedule: { total: number; planned: number; in_progress: number; done: number; overdue: number; upcoming_milestones: number };
+    subtasks: { total: number; done: number; pending: number; cancelled: number };
   }
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [todoColumns] = useState(["todo", "in_progress", "done"]);
@@ -318,6 +319,146 @@ export default function ProjectDetailPage() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentText, setEditCommentText] = useState("");
 
+  // Schedule state
+  interface ScheduleTask {
+    id: string;
+    title: string;
+    description: string;
+    start_date: string;
+    end_date: string;
+    duration_days: number;
+    assignee: string;
+    status: string;
+    depends_on: string[];
+    parent_id: string;
+    progress_pct: number;
+    order: number;
+  }
+  interface Milestone {
+    id: string;
+    title: string;
+    date: string;
+    description: string;
+    linked_tasks: string[];
+    status: string;
+  }
+  const [scheduleTasks, setScheduleTasks] = useState<ScheduleTask[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [scheduleView, setScheduleView] = useState<"table" | "gantt">("table");
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [showAddMilestone, setShowAddMilestone] = useState(false);
+  const [newSchedTitle, setNewSchedTitle] = useState("");
+  const [newSchedStart, setNewSchedStart] = useState("");
+  const [newSchedEnd, setNewSchedEnd] = useState("");
+  const [newSchedAssignee, setNewSchedAssignee] = useState("");
+  const [newSchedStatus, setNewSchedStatus] = useState("planned");
+  const [newSchedParent, setNewSchedParent] = useState("");
+  const [newSchedDepends, setNewSchedDepends] = useState<string[]>([]);
+  const [newMsTitle, setNewMsTitle] = useState("");
+  const [newMsDate, setNewMsDate] = useState("");
+  const [newMsDesc, setNewMsDesc] = useState("");
+  const [newMsLinked, setNewMsLinked] = useState<string[]>([]);
+
+
+  const loadSchedule = async () => {
+    try {
+      const res = await apiFetch<{ tasks: ScheduleTask[]; milestones: Milestone[] }>(
+        `/api/projects/${encodeURIComponent(name)}/schedule`
+      );
+      setScheduleTasks(res.tasks || []);
+      setMilestones(res.milestones || []);
+    } catch {}
+  };
+
+  const createScheduleTask = async () => {
+    if (!newSchedTitle.trim()) return;
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/tasks`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: newSchedTitle.trim(),
+          start_date: newSchedStart,
+          end_date: newSchedEnd,
+          assignee: newSchedAssignee.trim(),
+          status: newSchedStatus,
+          parent_id: newSchedParent,
+          depends_on: newSchedDepends,
+        }),
+      });
+      setNewSchedTitle("");
+      setNewSchedStart("");
+      setNewSchedEnd("");
+      setNewSchedAssignee("");
+      setNewSchedStatus("planned");
+      setNewSchedParent("");
+      setNewSchedDepends([]);
+      setShowAddTask(false);
+      loadSchedule();
+      loadSummary();
+    } catch {
+      toast.error(t("toast.failedToCreate"));
+    }
+  };
+
+  const deleteScheduleTask = async (taskId: string) => {
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+      loadSchedule();
+      loadSummary();
+    } catch {
+      toast.error(t("toast.failedToDelete"));
+    }
+  };
+
+  const updateScheduleTask = async (taskId: string, updates: Partial<ScheduleTask>) => {
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/tasks/${taskId}`, {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      });
+      loadSchedule();
+      loadSummary();
+    } catch {
+      toast.error(t("toast.failedToSave"));
+    }
+  };
+
+  const createMilestone = async () => {
+    if (!newMsTitle.trim()) return;
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/milestones`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: newMsTitle.trim(),
+          date: newMsDate,
+          description: newMsDesc.trim(),
+          linked_tasks: newMsLinked,
+        }),
+      });
+      setNewMsTitle("");
+      setNewMsDate("");
+      setNewMsDesc("");
+      setNewMsLinked([]);
+      setShowAddMilestone(false);
+      loadSchedule();
+    } catch {
+      toast.error(t("toast.failedToCreate"));
+    }
+  };
+
+  const deleteMilestone = async (msId: string) => {
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/milestones/${msId}`, {
+        method: "DELETE",
+      });
+      loadSchedule();
+    } catch {
+      toast.error(t("toast.failedToDelete"));
+    }
+  };
+
   const loadIssues = async () => {
     try {
       const res = await apiFetch<{ issues: IssueItem[] }>(
@@ -493,6 +634,7 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (activeTab === "todo") loadTodos();
     if (activeTab === "issues") loadIssues();
+    if (activeTab === "schedule") loadSchedule();
   }, [activeTab]);
 
   const loadDocs = async (path: string = docPath) => {
@@ -975,7 +1117,7 @@ export default function ProjectDetailPage() {
       {/* Tabs */}
       <div className="border-b border-neutral-200 dark:border-neutral-800">
         <nav className="flex gap-4">
-          {(["documents", "instructions", "todo", "issues", "settings"] as const).map((tab) => (
+          {(["documents", "instructions", "todo", "issues", "schedule", "settings"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1858,6 +2000,607 @@ export default function ProjectDetailPage() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "schedule" && (
+        <div className="space-y-4">
+          {/* Header: View toggle + Add buttons */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-neutral-900 dark:text-white">{t("schedule.title")}</h3>
+              {scheduleTasks.filter((st) => st.status === "overdue").length > 0 && (
+                <span className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {scheduleTasks.filter((st) => st.status === "overdue").length} {t("schedule.overdue")}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {/* View toggle */}
+              <div className="flex rounded-lg border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+                <button
+                  onClick={() => setScheduleView("table")}
+                  className={`px-3 py-1.5 text-xs font-medium ${
+                    scheduleView === "table"
+                      ? "bg-indigo-600 text-white"
+                      : "bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-750"
+                  }`}
+                >
+                  {t("schedule.table")}
+                </button>
+                <button
+                  onClick={() => setScheduleView("gantt")}
+                  className={`px-3 py-1.5 text-xs font-medium ${
+                    scheduleView === "gantt"
+                      ? "bg-indigo-600 text-white"
+                      : "bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-750"
+                  }`}
+                >
+                  {t("schedule.gantt")}
+                </button>
+              </div>
+              <button
+                onClick={() => setShowAddTask(true)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {t("schedule.addTask")}
+              </button>
+              <button
+                onClick={() => setShowAddMilestone(true)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {t("schedule.addMilestone")}
+              </button>
+            </div>
+          </div>
+
+          {/* Add Task Form */}
+          {showAddTask && (
+            <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  value={newSchedTitle}
+                  onChange={(e) => setNewSchedTitle(e.target.value)}
+                  placeholder={t("schedule.taskTitle")}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                />
+                <input
+                  value={newSchedAssignee}
+                  onChange={(e) => setNewSchedAssignee(e.target.value)}
+                  placeholder={t("schedule.assignee")}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                />
+                <input
+                  type="date"
+                  value={newSchedStart}
+                  onChange={(e) => setNewSchedStart(e.target.value)}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                />
+                <input
+                  type="date"
+                  value={newSchedEnd}
+                  onChange={(e) => setNewSchedEnd(e.target.value)}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                />
+                <select
+                  value={newSchedStatus}
+                  onChange={(e) => setNewSchedStatus(e.target.value)}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                >
+                  <option value="planned">{t("schedule.planned")}</option>
+                  <option value="in_progress">{t("schedule.inProgress")}</option>
+                  <option value="done">{t("schedule.done")}</option>
+                </select>
+                <select
+                  value={newSchedParent}
+                  onChange={(e) => setNewSchedParent(e.target.value)}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                >
+                  <option value="">{t("schedule.parentTask")} (--)</option>
+                  {scheduleTasks.filter((st) => !st.parent_id).map((st) => (
+                    <option key={st.id} value={st.id}>{st.title}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Dependencies multi-select */}
+              <div>
+                <label className="text-xs text-neutral-500 dark:text-neutral-400 mb-1 block">{t("schedule.dependencies")}</label>
+                <div className="flex flex-wrap gap-1">
+                  {scheduleTasks.map((st) => (
+                    <button
+                      key={st.id}
+                      onClick={() => {
+                        setNewSchedDepends((prev) =>
+                          prev.includes(st.id) ? prev.filter((d) => d !== st.id) : [...prev, st.id]
+                        );
+                      }}
+                      className={`px-2 py-0.5 text-xs rounded-full border ${
+                        newSchedDepends.includes(st.id)
+                          ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300"
+                          : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400"
+                      }`}
+                    >
+                      {st.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={createScheduleTask}
+                  className="px-4 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                >
+                  {t("action.create")}
+                </button>
+                <button
+                  onClick={() => setShowAddTask(false)}
+                  className="px-4 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                >
+                  {t("action.cancel")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Add Milestone Form */}
+          {showAddMilestone && (
+            <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input
+                  value={newMsTitle}
+                  onChange={(e) => setNewMsTitle(e.target.value)}
+                  placeholder={t("schedule.milestone")}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                />
+                <input
+                  type="date"
+                  value={newMsDate}
+                  onChange={(e) => setNewMsDate(e.target.value)}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                />
+              </div>
+              <input
+                value={newMsDesc}
+                onChange={(e) => setNewMsDesc(e.target.value)}
+                placeholder={t("schedule.description")}
+                className="w-full px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+              />
+              {/* Link to tasks */}
+              <div>
+                <label className="text-xs text-neutral-500 dark:text-neutral-400 mb-1 block">{t("schedule.dependencies")}</label>
+                <div className="flex flex-wrap gap-1">
+                  {scheduleTasks.map((st) => (
+                    <button
+                      key={st.id}
+                      onClick={() => {
+                        setNewMsLinked((prev) =>
+                          prev.includes(st.id) ? prev.filter((d) => d !== st.id) : [...prev, st.id]
+                        );
+                      }}
+                      className={`px-2 py-0.5 text-xs rounded-full border ${
+                        newMsLinked.includes(st.id)
+                          ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300"
+                          : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400"
+                      }`}
+                    >
+                      {st.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={createMilestone}
+                  className="px-4 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                >
+                  {t("action.create")}
+                </button>
+                <button
+                  onClick={() => setShowAddMilestone(false)}
+                  className="px-4 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                >
+                  {t("action.cancel")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {scheduleTasks.length === 0 && milestones.length === 0 ? (
+            <div className="text-center py-16 text-neutral-400 dark:text-neutral-600">
+              <Calendar className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">{t("schedule.noTasks")}</p>
+            </div>
+          ) : scheduleView === "table" ? (
+            /* ===== Table View ===== */
+            <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+              {/* Milestones row */}
+              {milestones.length > 0 && (
+                <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-neutral-200 dark:border-neutral-800 flex flex-wrap gap-2">
+                  {milestones.map((ms) => (
+                    <span key={ms.id} className="inline-flex items-center gap-1 text-xs">
+                      <span className="text-amber-600 dark:text-amber-400">&#9670;</span>
+                      <span className="font-medium text-neutral-700 dark:text-neutral-300">{ms.title}</span>
+                      <span className="text-neutral-500 dark:text-neutral-400">({ms.date})</span>
+                      <button
+                        onClick={() => deleteMilestone(ms.id)}
+                        className="text-neutral-400 hover:text-red-500 ml-1"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50">
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 w-8">#</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.taskTitle")}</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.startDate")}</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.endDate")}</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.duration")}</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.assignee")}</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.status")}</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.progress")}</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.dependencies")}</th>
+                      <th className="text-right px-3 py-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 w-20"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scheduleTasks
+                      .sort((a, b) => a.order - b.order)
+                      .map((task, idx) => {
+                        const isOverdue = task.status === "overdue";
+                        const isChild = !!task.parent_id;
+                        const statusColors: Record<string, string> = {
+                          planned: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+                          in_progress: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+                          done: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+                          overdue: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+                        };
+                        return (
+                          <tr
+                            key={task.id}
+                            className={`border-b border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 ${
+                              isOverdue ? "border-l-2 border-l-red-500" : ""
+                            }`}
+                          >
+                            <td className="px-3 py-2 text-neutral-400 text-xs">{idx + 1}</td>
+                            <td className={`px-3 py-2 font-medium text-neutral-900 dark:text-white ${isChild ? "pl-8" : ""}`}>
+                              {isChild && <span className="text-neutral-400 mr-1">&#8627;</span>}
+                              {task.title}
+                            </td>
+                            <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400 text-xs font-mono">{task.start_date}</td>
+                            <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400 text-xs font-mono">{task.end_date}</td>
+                            <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400 text-xs">{task.duration_days}{t("schedule.days")}</td>
+                            <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400 text-xs">{task.assignee || "-"}</td>
+                            <td className="px-3 py-2">
+                              <select
+                                value={task.status}
+                                onChange={(e) => updateScheduleTask(task.id, { status: e.target.value })}
+                                className={`text-xs px-2 py-0.5 rounded-full font-medium border-0 cursor-pointer ${statusColors[task.status] || statusColors.planned}`}
+                              >
+                                <option value="planned">{t("schedule.planned")}</option>
+                                <option value="in_progress">{t("schedule.inProgress")}</option>
+                                <option value="done">{t("schedule.done")}</option>
+                              </select>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-16 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      task.status === "done"
+                                        ? "bg-green-500"
+                                        : task.status === "overdue"
+                                        ? "bg-red-500"
+                                        : "bg-indigo-500"
+                                    }`}
+                                    style={{ width: `${task.progress_pct}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-neutral-500">{task.progress_pct}%</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400 max-w-[120px] truncate">
+                              {task.depends_on.map((dep) => {
+                                const depTask = scheduleTasks.find((t2) => t2.id === dep);
+                                return depTask?.title || "";
+                              }).filter(Boolean).join(", ") || "-"}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                onClick={() => deleteScheduleTask(task.id)}
+                                className="text-neutral-400 hover:text-red-500 p-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* ===== Gantt Chart View ===== */
+            (() => {
+              // Calculate date range
+              const allDates = [
+                ...scheduleTasks.flatMap((t2) => [t2.start_date, t2.end_date].filter(Boolean)),
+                ...milestones.map((m) => m.date).filter(Boolean),
+              ];
+              if (allDates.length === 0) return null;
+
+              const sorted = allDates.sort();
+              const minDate = new Date(sorted[0]);
+              const maxDate = new Date(sorted[sorted.length - 1]);
+              minDate.setDate(minDate.getDate() - 7);
+              maxDate.setDate(maxDate.getDate() + 14);
+
+              const dayMs = 86400000;
+              const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / dayMs) + 1;
+              const dayWidth = 30;
+              const rowHeight = 32;
+              const headerHeight = 40;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const todayOffset = Math.floor((today.getTime() - minDate.getTime()) / dayMs);
+
+              // Generate month headers
+              const months: { label: string; startDay: number; span: number }[] = [];
+              let curMonth = -1;
+              let curYear = -1;
+              for (let d = 0; d < totalDays; d++) {
+                const dt = new Date(minDate.getTime() + d * dayMs);
+                if (dt.getMonth() !== curMonth || dt.getFullYear() !== curYear) {
+                  curMonth = dt.getMonth();
+                  curYear = dt.getFullYear();
+                  months.push({
+                    label: dt.toLocaleDateString(undefined, { month: "short", year: "numeric" }),
+                    startDay: d,
+                    span: 1,
+                  });
+                } else {
+                  months[months.length - 1].span++;
+                }
+              }
+
+              // Generate day labels
+              const days: { label: string; isWeekend: boolean; dayNum: number }[] = [];
+              for (let d = 0; d < totalDays; d++) {
+                const dt = new Date(minDate.getTime() + d * dayMs);
+                days.push({
+                  label: String(dt.getDate()),
+                  isWeekend: dt.getDay() === 0 || dt.getDay() === 6,
+                  dayNum: d,
+                });
+              }
+
+              const sortedTasks = [...scheduleTasks].sort((a, b) => a.order - b.order);
+
+              return (
+                <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+                  {/* Milestones row */}
+                  {milestones.length > 0 && (
+                    <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-neutral-200 dark:border-neutral-800 flex flex-wrap gap-2">
+                      {milestones.map((ms) => (
+                        <span key={ms.id} className="inline-flex items-center gap-1 text-xs">
+                          <span className="text-amber-600 dark:text-amber-400">&#9670;</span>
+                          <span className="font-medium text-neutral-700 dark:text-neutral-300">{ms.title}</span>
+                          <span className="text-neutral-500 dark:text-neutral-400">({ms.date})</span>
+                          <button onClick={() => deleteMilestone(ms.id)} className="text-neutral-400 hover:text-red-500 ml-1">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex">
+                    {/* Task labels (left side) */}
+                    <div className="flex-shrink-0 w-48 border-r border-neutral-200 dark:border-neutral-800">
+                      <div className="h-[40px] border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50 px-3 flex items-center">
+                        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.taskTitle")}</span>
+                      </div>
+                      {sortedTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`h-[32px] px-3 flex items-center border-b border-neutral-100 dark:border-neutral-800 text-xs truncate ${
+                            task.parent_id ? "pl-6" : ""
+                          } ${task.status === "overdue" ? "text-red-600 dark:text-red-400" : "text-neutral-700 dark:text-neutral-300"}`}
+                        >
+                          {task.parent_id && <span className="text-neutral-400 mr-1">&#8627;</span>}
+                          {task.title}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Gantt chart area */}
+                    <div
+                      className="overflow-x-auto flex-1"
+                      ref={(el) => {
+                        // Auto-scroll to today
+                        if (el && todayOffset > 0) {
+                          const scrollTo = todayOffset * dayWidth - el.clientWidth / 2;
+                          el.scrollLeft = Math.max(0, scrollTo);
+                        }
+                      }}
+                    >
+                      <div style={{ width: totalDays * dayWidth, position: "relative" }}>
+                        {/* Month headers */}
+                        <div className="flex border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50" style={{ height: headerHeight / 2 }}>
+                          {months.map((m, i) => (
+                            <div
+                              key={i}
+                              className="text-[10px] font-medium text-neutral-500 dark:text-neutral-400 border-r border-neutral-200 dark:border-neutral-800 flex items-center px-1 overflow-hidden"
+                              style={{ width: m.span * dayWidth }}
+                            >
+                              {m.label}
+                            </div>
+                          ))}
+                        </div>
+                        {/* Day headers */}
+                        <div className="flex border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50" style={{ height: headerHeight / 2 }}>
+                          {days.map((d, i) => (
+                            <div
+                              key={i}
+                              className={`text-[9px] text-center border-r border-neutral-100 dark:border-neutral-800 flex items-center justify-center ${
+                                d.isWeekend ? "bg-neutral-100 dark:bg-neutral-800 text-neutral-400" : "text-neutral-500 dark:text-neutral-400"
+                              }`}
+                              style={{ width: dayWidth }}
+                            >
+                              {d.label}
+                            </div>
+                          ))}
+                        </div>
+                        {/* Task bars */}
+                        <div style={{ position: "relative" }}>
+                          {/* Weekend columns */}
+                          {days.map(
+                            (d, i) =>
+                              d.isWeekend && (
+                                <div
+                                  key={`w-${i}`}
+                                  className="absolute top-0 bottom-0 bg-neutral-50 dark:bg-neutral-800/30"
+                                  style={{ left: i * dayWidth, width: dayWidth, height: sortedTasks.length * rowHeight }}
+                                />
+                              )
+                          )}
+                          {/* Today line */}
+                          {todayOffset >= 0 && todayOffset < totalDays && (
+                            <div
+                              className="absolute top-0 w-px bg-red-500 z-10"
+                              style={{
+                                left: todayOffset * dayWidth + dayWidth / 2,
+                                height: sortedTasks.length * rowHeight,
+                                borderLeft: "1px dashed rgb(239 68 68)",
+                              }}
+                            />
+                          )}
+                          {/* Milestone diamonds */}
+                          {milestones.map((ms) => {
+                            const msOffset = Math.floor(
+                              (new Date(ms.date).getTime() - minDate.getTime()) / dayMs
+                            );
+                            if (msOffset < 0 || msOffset >= totalDays) return null;
+                            return (
+                              <div
+                                key={`ms-${ms.id}`}
+                                className="absolute z-10 text-amber-500 dark:text-amber-400"
+                                style={{
+                                  left: msOffset * dayWidth + dayWidth / 2 - 6,
+                                  top: -2,
+                                }}
+                                title={ms.title}
+                              >
+                                <span className="text-sm">&#9670;</span>
+                              </div>
+                            );
+                          })}
+                          {/* Task rows */}
+                          {sortedTasks.map((task) => {
+                            const startOffset = task.start_date
+                              ? Math.floor((new Date(task.start_date).getTime() - minDate.getTime()) / dayMs)
+                              : 0;
+                            const endOffset = task.end_date
+                              ? Math.floor((new Date(task.end_date).getTime() - minDate.getTime()) / dayMs)
+                              : startOffset;
+                            const barWidth = Math.max((endOffset - startOffset + 1) * dayWidth - 4, 8);
+
+                            const barColors: Record<string, string> = {
+                              planned: "bg-blue-400 dark:bg-blue-600",
+                              in_progress: "bg-amber-400 dark:bg-amber-600",
+                              done: "bg-green-400 dark:bg-green-600",
+                              overdue: "bg-red-400 dark:bg-red-600",
+                            };
+
+                            return (
+                              <div
+                                key={task.id}
+                                className="border-b border-neutral-100 dark:border-neutral-800 relative"
+                                style={{ height: rowHeight }}
+                              >
+                                {/* Task bar */}
+                                <div
+                                  className={`absolute top-1.5 h-5 rounded-sm ${barColors[task.status] || barColors.planned} opacity-80 hover:opacity-100 cursor-default`}
+                                  style={{
+                                    left: startOffset * dayWidth + 2,
+                                    width: barWidth,
+                                  }}
+                                  title={`${task.title} (${task.start_date} ~ ${task.end_date})`}
+                                >
+                                  {/* Progress fill */}
+                                  {task.progress_pct > 0 && task.progress_pct < 100 && (
+                                    <div
+                                      className="absolute inset-y-0 left-0 bg-white/30 rounded-l-sm"
+                                      style={{ width: `${task.progress_pct}%` }}
+                                    />
+                                  )}
+                                  {barWidth > 60 && (
+                                    <span className="absolute inset-0 flex items-center px-1 text-[9px] text-white font-medium truncate">
+                                      {task.title}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {/* Dependency arrows (simple SVG lines) */}
+                          <svg
+                            className="absolute top-0 left-0 pointer-events-none"
+                            style={{ width: totalDays * dayWidth, height: sortedTasks.length * rowHeight }}
+                          >
+                            {sortedTasks.map((task) =>
+                              task.depends_on.map((depId) => {
+                                const depIdx = sortedTasks.findIndex((t2) => t2.id === depId);
+                                const taskIdx = sortedTasks.indexOf(task);
+                                if (depIdx < 0) return null;
+                                const depTask = sortedTasks[depIdx];
+                                const depEndOffset = depTask.end_date
+                                  ? Math.floor((new Date(depTask.end_date).getTime() - minDate.getTime()) / dayMs)
+                                  : 0;
+                                const taskStartOffset = task.start_date
+                                  ? Math.floor((new Date(task.start_date).getTime() - minDate.getTime()) / dayMs)
+                                  : 0;
+
+                                const x1 = (depEndOffset + 1) * dayWidth;
+                                const y1 = depIdx * rowHeight + rowHeight / 2;
+                                const x2 = taskStartOffset * dayWidth + 2;
+                                const y2 = taskIdx * rowHeight + rowHeight / 2;
+
+                                return (
+                                  <g key={`${task.id}-${depId}`}>
+                                    <line
+                                      x1={x1}
+                                      y1={y1}
+                                      x2={x2}
+                                      y2={y2}
+                                      stroke="rgb(156, 163, 175)"
+                                      strokeWidth="1"
+                                      strokeDasharray="3,2"
+                                    />
+                                    {/* Arrow head */}
+                                    <polygon
+                                      points={`${x2},${y2} ${x2 - 4},${y2 - 3} ${x2 - 4},${y2 + 3}`}
+                                      fill="rgb(156, 163, 175)"
+                                    />
+                                  </g>
+                                );
+                              })
+                            )}
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()
           )}
         </div>
       )}

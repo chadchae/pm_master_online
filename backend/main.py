@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from services import auth_service, scanner_service, document_service
 from services import common_folder_service, server_service, people_service
-from services import todo_service, issue_service, subtask_service
+from services import todo_service, issue_service, subtask_service, schedule_service
 
 app = FastAPI(title="Project Manager", version="0.1.0")
 
@@ -834,7 +834,7 @@ def get_project_summary(project_name: str):
             "resolved": resolved_issues,
         },
         "subtasks": subtask_counts,
-        "schedule": {"total": 0, "upcoming": 0, "overdue": 0},  # Placeholder
+        "schedule": schedule_service.get_summary(project_name),
     }
 
 
@@ -1004,6 +1004,114 @@ def reorder_subtasks(project_name: str, body: SubtaskReorderRequest):
     """Reorder subtasks based on ID list."""
     data = subtask_service.reorder_subtasks(project_name, body.ordered_ids)
     return data
+
+
+# --- Schedule endpoints ---
+
+class ScheduleTaskCreateRequest(BaseModel):
+    title: str
+    description: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    assignee: str = ""
+    status: str = "planned"
+    depends_on: list[str] = []
+    parent_id: str = ""
+    progress_pct: int = 0
+
+
+class ScheduleTaskUpdateRequest(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    assignee: str | None = None
+    status: str | None = None
+    depends_on: list[str] | None = None
+    parent_id: str | None = None
+    progress_pct: int | None = None
+
+
+class ScheduleReorderRequest(BaseModel):
+    ordered_ids: list[str]
+
+
+class MilestoneCreateRequest(BaseModel):
+    title: str
+    date: str = ""
+    description: str = ""
+    linked_tasks: list[str] = []
+    status: str = "upcoming"
+
+
+class MilestoneUpdateRequest(BaseModel):
+    title: str | None = None
+    date: str | None = None
+    description: str | None = None
+    linked_tasks: list[str] | None = None
+    status: str | None = None
+
+
+@app.get("/api/projects/{project_name}/schedule")
+def list_schedule(project_name: str):
+    """List full schedule data for a project."""
+    return schedule_service.list_schedule(project_name)
+
+
+@app.post("/api/projects/{project_name}/schedule/tasks")
+def create_schedule_task(project_name: str, body: ScheduleTaskCreateRequest):
+    """Create a new schedule task."""
+    return schedule_service.create_task(project_name, body.model_dump())
+
+
+@app.put("/api/projects/{project_name}/schedule/tasks/{task_id}")
+def update_schedule_task(project_name: str, task_id: str, body: ScheduleTaskUpdateRequest):
+    """Update a schedule task."""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    task = schedule_service.update_task(project_name, task_id, updates)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+@app.delete("/api/projects/{project_name}/schedule/tasks/{task_id}")
+def delete_schedule_task(project_name: str, task_id: str):
+    """Delete a schedule task."""
+    success = schedule_service.delete_task(project_name, task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"success": True}
+
+
+@app.put("/api/projects/{project_name}/schedule/tasks/reorder")
+def reorder_schedule_tasks(project_name: str, body: ScheduleReorderRequest):
+    """Reorder schedule tasks."""
+    return schedule_service.reorder_tasks(project_name, body.ordered_ids)
+
+
+@app.post("/api/projects/{project_name}/schedule/milestones")
+def create_milestone(project_name: str, body: MilestoneCreateRequest):
+    """Create a new milestone."""
+    return schedule_service.create_milestone(project_name, body.model_dump())
+
+
+@app.put("/api/projects/{project_name}/schedule/milestones/{ms_id}")
+def update_milestone(project_name: str, ms_id: str, body: MilestoneUpdateRequest):
+    """Update a milestone."""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    ms = schedule_service.update_milestone(project_name, ms_id, updates)
+    if ms is None:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    return ms
+
+
+@app.delete("/api/projects/{project_name}/schedule/milestones/{ms_id}")
+def delete_milestone(project_name: str, ms_id: str):
+    """Delete a milestone."""
+    success = schedule_service.delete_milestone(project_name, ms_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    return {"success": True}
 
 
 # --- Download project ---

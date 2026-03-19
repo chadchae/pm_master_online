@@ -458,7 +458,7 @@ export default function IdeasPage() {
                         {idea.has_docs && (
                           <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                             <FileText className="w-3 h-3" />
-                            docs
+                            docs {idea.doc_count > 0 && `(${idea.doc_count})`}
                           </span>
                         )}
                       </div>
@@ -607,7 +607,7 @@ export default function IdeasPage() {
               {sortedFiltered.map((idea) => (
                 <tr
                   key={idea.name}
-                  onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(idea.name)}`)}
+                  onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(idea.name)}?from=ideas`)}
                   className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-3">

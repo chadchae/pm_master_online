@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   Lightbulb,
@@ -50,6 +50,7 @@ const NAV_ITEMS: NavItemDef[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { t } = useLocale();
   const [collapsed, setCollapsed] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -57,8 +58,12 @@ export function Sidebar() {
   const [showWorkExec, setShowWorkExec] = useState(false);
   const [showWorkStatus, setShowWorkStatus] = useState(false);
 
+  const fromIdeas = searchParams.get("from") === "ideas";
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
+    // When viewing project detail from ideas, highlight Ideas instead of Projects
+    if (href === "/dashboard/ideas" && fromIdeas && pathname.startsWith("/dashboard/projects/")) return true;
+    if (href === "/dashboard/projects" && fromIdeas && pathname.startsWith("/dashboard/projects/")) return false;
     return pathname.startsWith(href);
   };
 

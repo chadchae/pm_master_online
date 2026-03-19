@@ -270,9 +270,10 @@ def scan_projects() -> list[dict[str, Any]]:
                 if label:
                     project["metadata"]["label"] = label
 
-            # Check has_docs
+            # Check has_docs and count
             docs_dir = item / "docs"
             project["has_docs"] = docs_dir.is_dir() and any(docs_dir.iterdir()) if docs_dir.is_dir() else False
+            project["doc_count"] = len([f for f in docs_dir.iterdir() if f.is_file()]) if docs_dir.is_dir() else 0
 
             # Get last modified
             project["last_modified"] = _get_last_modified(item)

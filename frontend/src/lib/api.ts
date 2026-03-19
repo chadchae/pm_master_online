@@ -79,6 +79,7 @@ export interface Project {
   metadata: ProjectMetadata;
   last_modified: string;
   has_docs: boolean;
+  doc_count: number;
 }
 
 export interface FileItem {

@@ -78,7 +78,7 @@ export function Sidebar() {
           </div>
           {!collapsed && (
             <span className="text-sm font-semibold text-neutral-900 dark:text-white truncate">
-              Project Manager
+              Project Manager V2
             </span>
           )}
         </div>

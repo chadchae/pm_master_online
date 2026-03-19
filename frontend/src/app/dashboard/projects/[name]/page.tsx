@@ -620,21 +620,25 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const addingRef = { current: false };
   const addSubtask = async () => {
-    if (!newSubtaskTitle.trim()) return;
+    if (!newSubtaskTitle.trim() || addingRef.current) return;
+    addingRef.current = true;
     try {
-      const subtask = await apiFetch<Subtask>(
+      await apiFetch(
         `/api/projects/${encodeURIComponent(name)}/subtasks`,
         {
           method: "POST",
           body: JSON.stringify({ title: newSubtaskTitle.trim(), description: newSubtaskDesc.trim() }),
         }
       );
-      setSubtasks((prev) => [...prev, subtask]);
       setNewSubtaskTitle("");
       setNewSubtaskDesc("");
+      await loadSubtasks();
     } catch {
       toast.error(t("toast.failedToCreate"));
+    } finally {
+      addingRef.current = false;
     }
   };
 
@@ -676,7 +680,7 @@ export default function ProjectDetailPage() {
         `/api/projects/${encodeURIComponent(name)}/subtasks/${subtaskId}`,
         { method: "DELETE" }
       );
-      setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
+      await loadSubtasks();
     } catch {
       toast.error(t("toast.failedToDelete"));
     }

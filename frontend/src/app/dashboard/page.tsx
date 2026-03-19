@@ -300,9 +300,16 @@ export default function DashboardPage() {
                 >
                   <div className="px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-800">
                     <div className="flex items-center justify-between">
-                      <span className={`text-xs font-semibold uppercase tracking-wider ${stage.textColor}`}>
-                        {stage.label}
-                      </span>
+                      <div>
+                        <span className={`text-xs font-semibold uppercase tracking-wider ${stage.textColor}`}>
+                          {stage.label}
+                        </span>
+                        {stage.sublabel && (
+                          <span className="text-[10px] text-neutral-400 ml-1.5">
+                            / {stage.sublabel}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
                         {stageProjects.length}
                       </span>

@@ -3,6 +3,7 @@
 export interface StageConfig {
   folder: string;
   label: string;
+  sublabel: string;  // Research context label
   color: string;
   bgColor: string;
   textColor: string;
@@ -13,6 +14,7 @@ export const STAGES: StageConfig[] = [
   {
     folder: "1_idea_stage",
     label: "Idea",
+    sublabel: "",
     color: "gray",
     bgColor: "bg-gray-100 dark:bg-gray-800",
     textColor: "text-gray-700 dark:text-gray-300",
@@ -21,6 +23,7 @@ export const STAGES: StageConfig[] = [
   {
     folder: "2_initiation_stage",
     label: "Initiation",
+    sublabel: "Discussion",
     color: "blue",
     bgColor: "bg-blue-50 dark:bg-blue-950",
     textColor: "text-blue-700 dark:text-blue-300",
@@ -29,6 +32,7 @@ export const STAGES: StageConfig[] = [
   {
     folder: "3_in_development",
     label: "Development",
+    sublabel: "Data & Lit Review",
     color: "amber",
     bgColor: "bg-amber-50 dark:bg-amber-950",
     textColor: "text-amber-700 dark:text-amber-300",
@@ -37,6 +41,7 @@ export const STAGES: StageConfig[] = [
   {
     folder: "4_in_testing",
     label: "Testing",
+    sublabel: "Analysis",
     color: "purple",
     bgColor: "bg-purple-50 dark:bg-purple-950",
     textColor: "text-purple-700 dark:text-purple-300",
@@ -45,6 +50,7 @@ export const STAGES: StageConfig[] = [
   {
     folder: "5_completed",
     label: "Completed",
+    sublabel: "Writing",
     color: "green",
     bgColor: "bg-green-50 dark:bg-green-950",
     textColor: "text-green-700 dark:text-green-300",
@@ -53,6 +59,7 @@ export const STAGES: StageConfig[] = [
   {
     folder: "6_archived",
     label: "Archived",
+    sublabel: "Submitted",
     color: "neutral",
     bgColor: "bg-neutral-100 dark:bg-neutral-800",
     textColor: "text-neutral-600 dark:text-neutral-400",

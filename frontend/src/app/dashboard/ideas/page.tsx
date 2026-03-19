@@ -47,6 +47,17 @@ export default function IdeasPage() {
   const [newType, setNewType] = useState("");
   const [creating, setCreating] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [typeFilters, setTypeFilters] = useState<Set<string>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("pm_ideaTypeFilters");
+      if (saved) { try { return new Set(JSON.parse(saved)); } catch {} }
+    }
+    return new Set();
+  });
+
+  useEffect(() => {
+    localStorage.setItem("pm_ideaTypeFilters", JSON.stringify([...typeFilters]));
+  }, [typeFilters]);
 
   useEffect(() => {
     loadIdeas();
@@ -140,10 +151,21 @@ export default function IdeasPage() {
     });
   };
 
-  const filtered = ideas.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.metadata?.description || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const TYPE_ORDER = ["개인", "연구", "개발", "기타"] as const;
+  const normalizeType = (t: string): string => {
+    if (!t) return "기타";
+    if (t === "개인" || t === "연구" || t === "개발") return t;
+    if (t.includes("연구") && t.includes("개발")) return "연구";
+    return "기타";
+  };
+
+  const filtered = ideas.filter((p) => {
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.metadata?.description || "").toLowerCase().includes(search.toLowerCase());
+    if (!matchSearch) return false;
+    if (typeFilters.size === 0) return true;
+    return typeFilters.has(normalizeType(p.metadata?.["유형"] || ""));
+  });
 
   // Group by type
   const byType: Record<string, Project[]> = {};
@@ -244,6 +266,29 @@ export default function IdeasPage() {
               <List className="w-3.5 h-3.5" />
               List
             </button>
+          </div>
+          {/* Type filter checkboxes */}
+          <div className="flex items-center gap-2">
+            {TYPE_ORDER.map((type) => (
+              <label key={type} className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={typeFilters.has(type)}
+                  onChange={() => {
+                    setTypeFilters((prev) => {
+                      const next = new Set(prev);
+                      next.has(type) ? next.delete(type) : next.add(type);
+                      return next;
+                    });
+                  }}
+                  className="w-3.5 h-3.5 rounded border-neutral-300 text-amber-600 focus:ring-amber-500"
+                />
+                {type}
+              </label>
+            ))}
+            {typeFilters.size > 0 && (
+              <button onClick={() => setTypeFilters(new Set())} className="text-xs text-neutral-400 hover:text-neutral-600">×</button>
+            )}
           </div>
           <button
             onClick={() => setShowNewIdea(!showNewIdea)}

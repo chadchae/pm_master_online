@@ -24,6 +24,7 @@ import { MetaTags } from "@/components/MetaTags";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
 import { ConfirmDialog, PromptDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
+import { ListExportBar, generateMD, generateCSV, downloadFile, printList } from "@/components/ListExportBar";
 
 export default function IdeasPage() {
   const router = useRouter();
@@ -453,6 +454,46 @@ export default function IdeasPage() {
         </div>
       ) : (
         /* List View */
+        <>
+        <ListExportBar
+          onPrint={() => {
+            const rows = sortedFiltered.map((idea) => ({
+              Project: idea.metadata?.label || idea.name,
+              Type: idea.metadata?.["유형"] || "-",
+              Importance: idea.metadata?.["중요도"] ? "\u2605".repeat(parseInt(idea.metadata["중요도"])) : "-",
+              Severity: idea.metadata?.["위급도"] || "-",
+              Urgency: idea.metadata?.["긴급도"] || "-",
+              Created: idea.metadata?.["작성일"] || "-",
+              Modified: idea.last_modified?.split("T")[0] || "-",
+            }));
+            printList("Ideas", rows);
+          }}
+          onExportMD={() => {
+            const rows = sortedFiltered.map((idea) => ({
+              Project: idea.metadata?.label || idea.name,
+              Type: idea.metadata?.["유형"] || "-",
+              Importance: idea.metadata?.["중요도"] ? "\u2605".repeat(parseInt(idea.metadata["중요도"])) : "-",
+              Severity: idea.metadata?.["위급도"] || "-",
+              Urgency: idea.metadata?.["긴급도"] || "-",
+              Created: idea.metadata?.["작성일"] || "-",
+              Modified: idea.last_modified?.split("T")[0] || "-",
+            }));
+            downloadFile(generateMD("Ideas", rows), "ideas.md", "text/markdown");
+          }}
+          onExportCSV={() => {
+            const rows = sortedFiltered.map((idea) => ({
+              Project: idea.metadata?.label || idea.name,
+              Folder: idea.name,
+              Type: idea.metadata?.["유형"] || "",
+              Importance: idea.metadata?.["중요도"] || "",
+              Severity: idea.metadata?.["위급도"] || "",
+              Urgency: idea.metadata?.["긴급도"] || "",
+              Created: idea.metadata?.["작성일"] || "",
+              Modified: idea.last_modified?.split("T")[0] || "",
+            }));
+            downloadFile(generateCSV(rows), "ideas.csv", "text/csv");
+          }}
+        />
         <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-300 dark:border-neutral-800 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -578,6 +619,7 @@ export default function IdeasPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
       {/* Move Modal */}
       {moveModal && (

@@ -10,6 +10,7 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
 import { ConfirmDialog, PromptDialog, NewProjectDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
+import { ListExportBar, generateMD, generateCSV, downloadFile, printList } from "@/components/ListExportBar";
 import toast from "react-hot-toast";
 
 // Light theme variations
@@ -652,6 +653,49 @@ export default function DashboardPage() {
 
         {/* List View */}
         {viewMode === "list" && (
+          <>
+          <ListExportBar
+            onPrint={() => {
+              const rows = sortedListProjects.map((p) => ({
+                Project: p.metadata?.label || p.name,
+                Stage: getStageByFolder(p.stage)?.label || p.stage,
+                Type: p.metadata?.["유형"] || "-",
+                Importance: p.metadata?.["중요도"] ? "\u2605".repeat(parseInt(p.metadata["중요도"])) : "-",
+                Severity: p.metadata?.["위급도"] || "-",
+                Urgency: p.metadata?.["긴급도"] || "-",
+                Created: p.metadata?.["작성일"] || "-",
+                Modified: p.last_modified?.split("T")[0] || "-",
+              }));
+              printList("Active Projects", rows);
+            }}
+            onExportMD={() => {
+              const rows = sortedListProjects.map((p) => ({
+                Project: p.metadata?.label || p.name,
+                Stage: getStageByFolder(p.stage)?.label || p.stage,
+                Type: p.metadata?.["유형"] || "-",
+                Importance: p.metadata?.["중요도"] ? "\u2605".repeat(parseInt(p.metadata["중요도"])) : "-",
+                Severity: p.metadata?.["위급도"] || "-",
+                Urgency: p.metadata?.["긴급도"] || "-",
+                Created: p.metadata?.["작성일"] || "-",
+                Modified: p.last_modified?.split("T")[0] || "-",
+              }));
+              downloadFile(generateMD("Active Projects", rows), "projects.md", "text/markdown");
+            }}
+            onExportCSV={() => {
+              const rows = sortedListProjects.map((p) => ({
+                Project: p.metadata?.label || p.name,
+                Folder: p.name,
+                Stage: getStageByFolder(p.stage)?.label || p.stage,
+                Type: p.metadata?.["유형"] || "",
+                Importance: p.metadata?.["중요도"] || "",
+                Severity: p.metadata?.["위급도"] || "",
+                Urgency: p.metadata?.["긴급도"] || "",
+                Created: p.metadata?.["작성일"] || "",
+                Modified: p.last_modified?.split("T")[0] || "",
+              }));
+              downloadFile(generateCSV(rows), "projects.csv", "text/csv");
+            }}
+          />
           <div className={`${theme.card} rounded-xl border ${theme.cardBorder} overflow-hidden`}>
             <table className="w-full text-sm">
               <thead>
@@ -763,6 +807,7 @@ export default function DashboardPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

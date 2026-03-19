@@ -47,6 +47,7 @@ const MarkdownPreview = lazy(() => import("@uiw/react-markdown-preview"));
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { PeopleTagInput } from "@/components/PeopleTagInput";
+import { ListExportBar, generateMD, generateCSV, downloadFile, printList } from "@/components/ListExportBar";
 import { ConfirmDialog, PromptDialog } from "@/components/AppDialogs";
 import toast from "react-hot-toast";
 import { useLocale } from "@/lib/i18n";
@@ -2619,6 +2620,52 @@ export default function ProjectDetailPage() {
             </div>
           ) : scheduleView === "table" ? (
             /* ===== Table View ===== */
+            <>
+            <ListExportBar
+              onPrint={() => {
+                const rows = scheduleTasks.sort((a, b) => a.order - b.order).map((task) => ({
+                  Title: task.title,
+                  Start: task.start_date,
+                  End: task.end_date,
+                  Duration: `${task.duration_days}d`,
+                  Assignee: task.assignee || "-",
+                  Status: task.status,
+                  Category: task.category || "-",
+                  Progress: `${task.progress_pct}%`,
+                  Dependencies: task.depends_on?.length ? task.depends_on.map((d) => scheduleTasks.find((t) => t.id === d)?.title || d).join(", ") : "-",
+                }));
+                printList(`Schedule - ${project?.metadata?.label || project?.name || "Project"}`, rows);
+              }}
+              onExportMD={() => {
+                const rows = scheduleTasks.sort((a, b) => a.order - b.order).map((task) => ({
+                  Title: task.title,
+                  Start: task.start_date,
+                  End: task.end_date,
+                  Duration: `${task.duration_days}d`,
+                  Assignee: task.assignee || "-",
+                  Status: task.status,
+                  Category: task.category || "-",
+                  Progress: `${task.progress_pct}%`,
+                  Dependencies: task.depends_on?.length ? task.depends_on.map((d) => scheduleTasks.find((t) => t.id === d)?.title || d).join(", ") : "-",
+                }));
+                downloadFile(generateMD(`Schedule - ${project?.metadata?.label || project?.name || "Project"}`, rows), "schedule.md", "text/markdown");
+              }}
+              onExportCSV={() => {
+                const rows = scheduleTasks.sort((a, b) => a.order - b.order).map((task) => ({
+                  Title: task.title,
+                  Description: task.description || "",
+                  Start: task.start_date,
+                  End: task.end_date,
+                  Duration: String(task.duration_days),
+                  Assignee: task.assignee || "",
+                  Status: task.status,
+                  Category: task.category || "",
+                  Progress: String(task.progress_pct),
+                  Dependencies: task.depends_on?.length ? task.depends_on.map((d) => scheduleTasks.find((t) => t.id === d)?.title || d).join("; ") : "",
+                }));
+                downloadFile(generateCSV(rows), "schedule.csv", "text/csv");
+              }}
+            />
             <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
               {/* Milestones row */}
               {milestones.length > 0 && (
@@ -2795,6 +2842,7 @@ export default function ProjectDetailPage() {
                 </table>
               </div>
             </div>
+            </>
           ) : (
             /* ===== Gantt Chart View ===== */
             (() => {

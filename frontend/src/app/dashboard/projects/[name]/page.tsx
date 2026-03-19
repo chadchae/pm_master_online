@@ -2431,6 +2431,71 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
+          {/* Edit Task Form (card above table/gantt) */}
+          {editingSchedId && (
+            <div className="bg-white dark:bg-neutral-900 rounded-xl border border-indigo-200 dark:border-indigo-800 p-4 space-y-3 mb-3">
+              <h4 className="text-sm font-medium text-neutral-900 dark:text-white">Edit Task</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Title */}
+                <input value={editSchedTitle} onChange={(e) => setEditSchedTitle(e.target.value)} placeholder={t("schedule.taskTitle")} className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                {/* Assignee */}
+                <input value={editSchedAssignee} onChange={(e) => setEditSchedAssignee(e.target.value)} placeholder={t("schedule.assignee")} className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                {/* Parent Task */}
+                <select value={editSchedParent} onChange={(e) => setEditSchedParent(e.target.value)} className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white">
+                  <option value="">{t("schedule.parentTask")} (--)</option>
+                  {scheduleTasks.filter((st) => !st.parent_id && st.id !== editingSchedId).map((st) => (
+                    <option key={st.id} value={st.id}>{st.title}</option>
+                  ))}
+                </select>
+                {/* Category */}
+                <div className="flex gap-2">
+                  <select value={editSchedCategory} onChange={(e) => {
+                    if (e.target.value === "__new__") { setShowNewCategory(true); setEditSchedCategory(""); } else { setEditSchedCategory(e.target.value); }
+                  }} className="flex-1 px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white">
+                    <option value="">{t("schedule.category")} (--)</option>
+                    {categories.map((cat) => (<option key={cat.name} value={cat.name}>{cat.name}</option>))}
+                    <option value="__new__">+ {t("schedule.newCategory")}</option>
+                  </select>
+                </div>
+                {/* Start Date */}
+                <input type="date" value={editSchedStart} onChange={(e) => setEditSchedStart(e.target.value)} className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                {/* End Date */}
+                <input type="date" value={editSchedEnd} onChange={(e) => setEditSchedEnd(e.target.value)} className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                {/* Status */}
+                <select value={editSchedStatus} onChange={(e) => setEditSchedStatus(e.target.value)} className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white">
+                  <option value="planned">{t("schedule.planned")}</option>
+                  <option value="in_progress">{t("schedule.inProgress")}</option>
+                  <option value="done">{t("schedule.done")}</option>
+                </select>
+              </div>
+              {/* New category inline form */}
+              {showNewCategory && (
+                <div className="flex items-center gap-2">
+                  <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder={t("schedule.newCategory")} className="px-3 py-1.5 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
+                  <input type="color" value={newCatColor} onChange={(e) => setNewCatColor(e.target.value)} className="w-8 h-8 rounded border border-neutral-200 dark:border-neutral-700 cursor-pointer" />
+                  <button onClick={createCategory} className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">{t("action.create")}</button>
+                  <button onClick={() => setShowNewCategory(false)} className="px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-700">{t("action.cancel")}</button>
+                </div>
+              )}
+              {/* Dependencies multi-select */}
+              <div>
+                <label className="text-xs text-neutral-500 dark:text-neutral-400 mb-1 block">{t("schedule.dependencies")}</label>
+                <div className="flex flex-wrap gap-1">
+                  {scheduleTasks.filter((st) => st.id !== editingSchedId).map((st) => (
+                    <button key={st.id} onClick={() => { if (!editSchedDepends.includes(st.id)) setEditSchedDepends((prev) => [...prev, st.id]); }} className={`px-2 py-0.5 text-xs rounded-full border flex items-center gap-1 ${editSchedDepends.includes(st.id) ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300" : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400"}`}>
+                      {st.title}
+                      {editSchedDepends.includes(st.id) && (<span onClick={(e) => { e.stopPropagation(); setEditSchedDepends((prev) => prev.filter((d) => d !== st.id)); }} className="hover:text-red-500 cursor-pointer">x</span>)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={saveEditScheduleTask} className="px-4 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">{t("action.save")}</button>
+                <button onClick={() => setEditingSchedId(null)} className="px-4 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-800">{t("action.cancel")}</button>
+              </div>
+            </div>
+          )}
+
           {scheduleTasks.length === 0 && milestones.length === 0 ? (
             <div className="text-center py-16 text-neutral-400 dark:text-neutral-600">
               <Calendar className="w-10 h-10 mx-auto mb-2 opacity-50" />
@@ -2483,7 +2548,6 @@ export default function ProjectDetailPage() {
                       .map((task, idx) => {
                         const isOverdue = task.status === "overdue";
                         const isChild = !!task.parent_id;
-                        const isEditing = editingSchedId === task.id;
                         const statusColors: Record<string, string> = {
                           planned: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
                           in_progress: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
@@ -2492,67 +2556,6 @@ export default function ProjectDetailPage() {
                         };
                         const taskCat = categories.find((c) => c.name === task.category);
                         const blockedInProgress = hasUnfinishedDeps(task);
-
-                        if (isEditing) {
-                          return (
-                            <tr key={task.id} className="border-b border-neutral-100 dark:border-neutral-800 bg-indigo-50/50 dark:bg-indigo-950/20">
-                              <td className="px-3 py-2 text-neutral-400 text-xs">{idx + 1}</td>
-                              <td className="px-2 py-1">
-                                <input value={editSchedTitle} onChange={(e) => setEditSchedTitle(e.target.value)} className="w-full px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
-                              </td>
-                              <td className="px-2 py-1">
-                                <input type="date" value={editSchedStart} onChange={(e) => setEditSchedStart(e.target.value)} className="px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
-                              </td>
-                              <td className="px-2 py-1">
-                                <input type="date" value={editSchedEnd} onChange={(e) => setEditSchedEnd(e.target.value)} className="px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
-                              </td>
-                              <td className="px-3 py-2 text-neutral-400 text-xs">-</td>
-                              <td className="px-2 py-1">
-                                <input value={editSchedAssignee} onChange={(e) => setEditSchedAssignee(e.target.value)} className="w-full px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white" />
-                              </td>
-                              <td className="px-2 py-1">
-                                <select value={editSchedStatus} onChange={(e) => setEditSchedStatus(e.target.value)} className="text-xs px-2 py-1 rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white">
-                                  <option value="planned">{t("schedule.planned")}</option>
-                                  <option value="in_progress">{t("schedule.inProgress")}</option>
-                                  <option value="done">{t("schedule.done")}</option>
-                                </select>
-                              </td>
-                              <td className="px-2 py-1">
-                                <select value={editSchedCategory} onChange={(e) => {
-                                  if (e.target.value === "__new__") {
-                                    setShowNewCategory(true);
-                                    setEditSchedCategory("");
-                                  } else {
-                                    setEditSchedCategory(e.target.value);
-                                  }
-                                }} className="text-xs px-2 py-1 rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white">
-                                  <option value="">--</option>
-                                  {categories.map((cat) => (
-                                    <option key={cat.name} value={cat.name}>{cat.name}</option>
-                                  ))}
-                                  <option value="__new__">+ {t("schedule.newCategory")}</option>
-                                </select>
-                              </td>
-                              <td className="px-3 py-2 text-xs text-neutral-400">-</td>
-                              <td className="px-2 py-1">
-                                <div className="flex flex-wrap gap-0.5 max-w-[140px]">
-                                  {scheduleTasks.filter((st) => st.id !== task.id).map((st) => (
-                                    <button key={st.id} onClick={() => { if (!editSchedDepends.includes(st.id)) setEditSchedDepends((prev) => [...prev, st.id]); }} className={`px-1.5 py-0 text-[10px] rounded-full border flex items-center gap-0.5 ${editSchedDepends.includes(st.id) ? "bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 text-indigo-700 dark:text-indigo-300" : "bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500"}`}>
-                                      {st.title.slice(0, 10)}
-                                      {editSchedDepends.includes(st.id) && <span onClick={(e) => { e.stopPropagation(); setEditSchedDepends((prev) => prev.filter((d) => d !== st.id)); }} className="hover:text-red-500 cursor-pointer">×</span>}
-                                    </button>
-                                  ))}
-                                </div>
-                              </td>
-                              <td className="px-2 py-1 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <button onClick={saveEditScheduleTask} className="text-green-600 hover:text-green-700 p-1"><Check className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => setEditingSchedId(null)} className="text-neutral-400 hover:text-neutral-600 p-1"><X className="w-3.5 h-3.5" /></button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        }
 
                         return (
                           <tr
@@ -2616,7 +2619,7 @@ export default function ProjectDetailPage() {
                                 <span className="text-xs text-neutral-500">{task.progress_pct}%</span>
                               </div>
                             </td>
-                            <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400 max-w-[120px] truncate">
+                            <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400 max-w-[200px] truncate">
                               {task.depends_on.map((dep) => {
                                 const depTask = scheduleTasks.find((t2) => t2.id === dep);
                                 return depTask?.title || "";
@@ -2810,6 +2813,11 @@ export default function ProjectDetailPage() {
                       <div className="h-[40px] border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50 px-3 flex items-center">
                         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("schedule.taskTitle")}</span>
                       </div>
+                      {milestones.length > 0 && (
+                        <div className="h-[28px] px-3 flex items-center border-b border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-950/20">
+                          <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">Milestones</span>
+                        </div>
+                      )}
                       {ganttRows.map((row, ri) => {
                         if (row.type === "category") {
                           return (
@@ -2876,11 +2884,12 @@ export default function ProjectDetailPage() {
                           // Calculate total chart height considering category rows
                           const catRowCount = ganttRows.filter((r) => r.type === "category").length;
                           const taskRowCount = ganttRows.filter((r) => r.type === "task").length;
-                          const totalChartHeight = catRowCount * categoryRowHeight + taskRowCount * rowHeight;
+                          const milestoneAreaHeight = milestones.length > 0 ? 28 : 0;
+                          const totalChartHeight = milestoneAreaHeight + catRowCount * categoryRowHeight + taskRowCount * rowHeight;
 
                           // Calculate Y offset for each ganttRow
                           const rowYOffsets: number[] = [];
-                          let yAccum = 0;
+                          let yAccum = milestoneAreaHeight;
                           for (const row of ganttRows) {
                             rowYOffsets.push(yAccum);
                             yAccum += row.type === "category" ? categoryRowHeight : rowHeight;
@@ -2910,7 +2919,7 @@ export default function ProjectDetailPage() {
                                   }}
                                 />
                               )}
-                              {/* Milestone diamonds */}
+                              {/* Milestone row area */}
                               {milestones.map((ms) => {
                                 const msOffset = Math.floor(
                                   (new Date(ms.date).getTime() - minDate.getTime()) / dayMs
@@ -2919,17 +2928,22 @@ export default function ProjectDetailPage() {
                                 return (
                                   <div
                                     key={`ms-${ms.id}`}
-                                    className="absolute z-10 text-amber-500 dark:text-amber-400"
+                                    className="absolute z-10 flex items-center"
                                     style={{
                                       left: msOffset * dayWidth + dayWidth / 2 - 6,
-                                      top: -2,
+                                      top: 4,
                                     }}
-                                    title={ms.title}
+                                    title={`${ms.title}${ms.description ? ": " + ms.description : ""}`}
                                   >
-                                    <span className="text-sm">&#9670;</span>
+                                    <span className="text-amber-500 dark:text-amber-400 text-sm">&#9670;</span>
+                                    <span className="text-[9px] text-amber-600 dark:text-amber-400 ml-0.5 whitespace-nowrap font-medium">{ms.title}</span>
                                   </div>
                                 );
                               })}
+                              {/* Milestone area border */}
+                              {milestones.length > 0 && (
+                                <div className="absolute w-full border-b border-amber-200 dark:border-amber-800/50" style={{ top: milestoneAreaHeight, height: 0 }} />
+                              )}
                               {/* Category header rows + Task bar rows */}
                               {ganttRows.map((row, ri) => {
                                 if (row.type === "category") {

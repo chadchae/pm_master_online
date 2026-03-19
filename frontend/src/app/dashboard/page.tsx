@@ -8,6 +8,7 @@ import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutG
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
+import { ConfirmDialog, NewProjectDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
 import toast from "react-hot-toast";
 
@@ -31,6 +32,8 @@ export default function DashboardPage() {
   const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -309,28 +312,7 @@ export default function DashboardPage() {
               {t("dashboard.projectBoard")}
             </h2>
             <button
-              onClick={() => {
-                const folder = prompt(t("ideas.folderName"));
-                if (!folder?.trim()) return;
-                const label = prompt(t("ideas.displayName")) || folder;
-                const typeOptions = "1: 개발\n2: 연구\n3: 연구+개발\n4: 직접 입력";
-                const typeChoice = prompt(`${t("ideas.type")}\n${typeOptions}`, "1");
-                let projectType = "";
-                if (typeChoice === "1") projectType = "개발";
-                else if (typeChoice === "2") projectType = "연구";
-                else if (typeChoice === "3") projectType = "연구+개발";
-                else if (typeChoice === "4") { projectType = prompt("유형 입력:") || ""; }
-                else if (typeChoice) projectType = typeChoice;
-                apiFetch("/api/projects/create", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    folder_name: folder.trim().toLowerCase().replace(/\s+/g, "-"),
-                    label,
-                    project_type: projectType,
-                    stage: "2_initiation_stage",
-                  }),
-                }).then(() => { loadData(); toast.success(`Created "${label}"`); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
-              }}
+              onClick={() => setShowNewProject(true)}
               className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -405,13 +387,13 @@ export default function DashboardPage() {
                   className={`flex flex-col rounded-xl border transition-colors ${
                     isDragOver
                       ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30"
-                      : "border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900"
+                      : "border-neutral-300 dark:border-neutral-800 bg-white dark:bg-neutral-900"
                   }`}
                   onDragOver={(e) => handleDragOver(e, stage.folder)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, stage.folder)}
                 >
-                  <div className="px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-800">
+                  <div className="px-3 py-2.5 border-b border-neutral-200 dark:border-neutral-800">
                     <div className="flex items-center justify-between">
                       <div>
                         <span className={`text-xs font-semibold uppercase tracking-wider ${stage.textColor}`}>
@@ -453,10 +435,10 @@ export default function DashboardPage() {
                         onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`)}
                         className={`group p-2.5 rounded-lg border transition-all hover:shadow-sm cursor-pointer ${
                           draggedProject?.name === project.name
-                            ? "opacity-50 border-neutral-100 dark:border-neutral-800"
+                            ? "opacity-50 border-neutral-300 dark:border-neutral-800"
                             : dragOverCard === project.name && draggedProject?.stage === stage.folder
                             ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20"
-                            : "border-neutral-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-indigo-300 dark:hover:border-indigo-700"
+                            : "border-neutral-300 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:border-indigo-300 dark:hover:border-indigo-700"
                         }`}
                       >
                         <div className="flex items-start gap-1.5">
@@ -475,25 +457,26 @@ export default function DashboardPage() {
                             )}
                             <MetaTags metadata={project.metadata} compact />
                             <ProgressBar metadata={project.metadata} compact />
-                            <div className="flex items-center gap-1 mt-1">
+                            <div className="flex items-center gap-1 mt-1 flex-wrap">
                               {getTypeBadge(project.metadata?.유형)}
-                              {project.metadata?.작성일 && (
-                                <span className="text-xs text-neutral-400">
-                                  {project.metadata.작성일}
+                              {(project.metadata?.작성일 || project.metadata?.["목표종료일"]) && (
+                                <span className="inline-flex items-center gap-1 text-xs">
+                                  <Clock className="w-3 h-3 text-neutral-400" />
+                                  {project.metadata?.작성일 && (
+                                    <span className="text-neutral-500 dark:text-neutral-400">{project.metadata.작성일}</span>
+                                  )}
+                                  {project.metadata?.작성일 && project.metadata?.["목표종료일"] && (
+                                    <span className="text-neutral-400">~</span>
+                                  )}
+                                  {project.metadata?.["목표종료일"] && (
+                                    <span className="text-amber-600 dark:text-amber-400">{project.metadata["목표종료일"]}</span>
+                                  )}
                                 </span>
                               )}
                               {project.metadata?.포트 && (
-                                <span className="text-xs text-neutral-400">
-                                  :{project.metadata.포트}
-                                </span>
+                                <span className="text-xs text-neutral-400">:{project.metadata.포트}</span>
                               )}
                             </div>
-                            {project.metadata?.["목표종료일"] && (
-                              <p className="text-xs text-neutral-400 mt-0.5 flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {project.metadata["목표종료일"]}
-                              </p>
-                            )}
                             {project.metadata?.related_people && (
                               <p className="text-xs text-neutral-400 mt-0.5 truncate">
                                 {project.metadata.related_people}
@@ -502,7 +485,7 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         {/* Action buttons */}
-                        <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-neutral-100 dark:border-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1 mt-2 pt-1.5 border-t border-neutral-200 dark:border-neutral-800 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`); }}
                             className="p-1 text-neutral-400 hover:text-indigo-500 rounded" title={t("action.edit")}
@@ -522,11 +505,16 @@ export default function DashboardPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (!confirm(`Delete "${project.metadata?.label || project.name}"?`)) return;
-                              apiFetch(`/api/projects/move`, {
-                                method: "POST",
-                                body: JSON.stringify({ project_name: project.name, from_stage: project.stage, to_stage: "7_discarded", instruction: "" }),
-                              }).then(() => { loadData(); toast.success("Moved to trash"); }).catch(() => toast.error("Failed"));
+                              setConfirmDialog({
+                                message: `Delete "${project.metadata?.label || project.name}"?`,
+                                onConfirm: () => {
+                                  apiFetch(`/api/projects/move`, {
+                                    method: "POST",
+                                    body: JSON.stringify({ project_name: project.name, from_stage: project.stage, to_stage: "7_discarded", instruction: "" }),
+                                  }).then(() => { loadData(); toast.success("Moved to trash"); }).catch(() => toast.error("Failed"));
+                                  setConfirmDialog(null);
+                                },
+                              });
                             }}
                             className="p-1 text-neutral-400 hover:text-red-500 rounded ml-auto" title={t("action.delete")}
                           >
@@ -640,6 +628,37 @@ export default function DashboardPage() {
           onMoved={loadData}
         />
       )}
+
+      <NewProjectDialog
+        open={showNewProject}
+        onCancel={() => setShowNewProject(false)}
+        onConfirm={async (data) => {
+          setShowNewProject(false);
+          try {
+            await apiFetch("/api/projects/create", {
+              method: "POST",
+              body: JSON.stringify({
+                folder_name: data.folder,
+                label: data.label,
+                project_type: data.projectType,
+                stage: "2_initiation_stage",
+              }),
+            });
+            loadData();
+            toast.success(`Created "${data.label}"`);
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Failed");
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={!!confirmDialog}
+        message={confirmDialog?.message || ""}
+        variant="danger"
+        confirmLabel="Delete"
+        onConfirm={() => { confirmDialog?.onConfirm(); }}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </div>
   );
 }

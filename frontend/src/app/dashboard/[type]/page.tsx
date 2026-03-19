@@ -19,9 +19,11 @@ import {
   ChevronLeft,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { ConfirmDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
+const MarkdownPreview = lazy(() => import("@uiw/react-markdown-preview"));
 
 const VALID_TYPES = ["documents", "notes", "learning", "issues", "guidelines"];
 
@@ -53,6 +55,7 @@ export default function CommonFolderPage() {
   const [creatingFile, setCreatingFile] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewMenu, setShowNewMenu] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
   const isValid = VALID_TYPES.includes(type);
 
@@ -140,9 +143,7 @@ export default function CommonFolderPage() {
     }
   };
 
-  const deleteSelected = async () => {
-    if (selected.size === 0) return;
-    if (!confirm(`Delete ${selected.size} file${selected.size > 1 ? "s" : ""}? This cannot be undone.`)) return;
+  const doDeleteSelected = async () => {
     setDeletingBatch(true);
     let deleted = 0;
     for (const filename of selected) {
@@ -164,6 +165,17 @@ export default function CommonFolderPage() {
     setSelectMode(false);
     setDeletingBatch(false);
     toast.success(`${t("toast.deleted")} ${deleted} ${t("file.files")}`);
+  };
+
+  const deleteSelected = () => {
+    if (selected.size === 0) return;
+    setConfirmDialog({
+      message: `Delete ${selected.size} file${selected.size > 1 ? "s" : ""}? This cannot be undone.`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doDeleteSelected();
+      },
+    });
   };
 
   const createNewFile = async () => {
@@ -356,17 +368,22 @@ export default function CommonFolderPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!confirm(`Delete "${file.filename}"?`)) return;
-                    apiFetch(`/api/common/${type}/${encodeURIComponent(file.filename)}`, { method: "DELETE" })
-                      .then(() => {
-                        setFiles((prev) => prev.filter((f) => f.filename !== file.filename));
-                        if (selectedFile === file.filename) {
-                          setSelectedFile(null);
-                          setContent("");
-                        }
-                        toast.success(t("toast.deleted"));
-                      })
-                      .catch(() => toast.error(t("toast.failedToDelete")));
+                    setConfirmDialog({
+                      message: `Delete "${file.filename}"?`,
+                      onConfirm: () => {
+                        setConfirmDialog(null);
+                        apiFetch(`/api/common/${type}/${encodeURIComponent(file.filename)}`, { method: "DELETE" })
+                          .then(() => {
+                            setFiles((prev) => prev.filter((f) => f.filename !== file.filename));
+                            if (selectedFile === file.filename) {
+                              setSelectedFile(null);
+                              setContent("");
+                            }
+                            toast.success(t("toast.deleted"));
+                          })
+                          .catch(() => toast.error(t("toast.failedToDelete")));
+                      },
+                    });
                   }}
                   className="p-1.5 mr-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400 transition-all"
                   title={t("action.delete")}
@@ -535,15 +552,20 @@ export default function CommonFolderPage() {
                     </button>
                     <button
                       onClick={() => {
-                        if (!confirm(`Delete "${selectedFile}"?`)) return;
-                        apiFetch(`/api/common/${type}/${encodeURIComponent(selectedFile)}`, { method: "DELETE" })
-                          .then(() => {
-                            setFiles((prev) => prev.filter((f) => f.filename !== selectedFile));
-                            setSelectedFile(null);
-                            setContent("");
-                            toast.success(t("toast.deleted"));
-                          })
-                          .catch(() => toast.error(t("toast.failedToDelete")));
+                        setConfirmDialog({
+                          message: `Delete "${selectedFile}"?`,
+                          onConfirm: () => {
+                            setConfirmDialog(null);
+                            apiFetch(`/api/common/${type}/${encodeURIComponent(selectedFile)}`, { method: "DELETE" })
+                              .then(() => {
+                                setFiles((prev) => prev.filter((f) => f.filename !== selectedFile));
+                                setSelectedFile(null);
+                                setContent("");
+                                toast.success(t("toast.deleted"));
+                              })
+                              .catch(() => toast.error(t("toast.failedToDelete")));
+                          },
+                        });
                       }}
                       className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500 transition-colors"
                       title={t("action.delete")}
@@ -564,6 +586,13 @@ export default function CommonFolderPage() {
                     preview="live"
                   />
                 </Suspense>
+              ) : selectedFile?.endsWith(".md") ? (
+                <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+                  <MarkdownPreview
+                    source={content}
+                    style={{ padding: "1rem", backgroundColor: "transparent" }}
+                  />
+                </Suspense>
               ) : (
                 <pre className="p-4 text-sm font-mono text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words">
                   {content}
@@ -577,6 +606,14 @@ export default function CommonFolderPage() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={!!confirmDialog}
+        message={confirmDialog?.message || ""}
+        variant="danger"
+        confirmLabel="Delete"
+        onConfirm={() => { confirmDialog?.onConfirm(); }}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </div>
   );
 }

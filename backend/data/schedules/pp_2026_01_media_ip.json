@@ -1,0 +1,26 @@
+{
+  "tasks": [
+    {
+      "id": "dd8bb074-6027-4805-9fff-09cf86ea43b9",
+      "title": "ㅁ",
+      "description": "",
+      "start_date": "",
+      "end_date": "",
+      "duration_days": 0,
+      "assignee": "",
+      "status": "planned",
+      "depends_on": [],
+      "parent_id": "",
+      "category": "",
+      "progress_pct": 0,
+      "order": 0
+    }
+  ],
+  "milestones": [],
+  "categories": [
+    {
+      "name": "General",
+      "color": "#6b7280"
+    }
+  ]
+}

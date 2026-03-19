@@ -1,0 +1,31 @@
+{
+  "subtasks": [
+    {
+      "id": "3c8e4734-328d-45ec-b983-babf2e361b11",
+      "title": "어플리케이션 작성",
+      "description": "어플리케이션작성",
+      "status": "pending",
+      "order": 0,
+      "created_at": "2026-03-20",
+      "completed_at": ""
+    },
+    {
+      "id": "a2b96adb-e04d-4b53-aab6-504ece94890d",
+      "title": "어플리케이션 검토",
+      "description": "어플리케이션 검토",
+      "status": "pending",
+      "order": 1,
+      "created_at": "2026-03-20",
+      "completed_at": ""
+    },
+    {
+      "id": "5a673896-809e-45f1-bbfc-eb1abd938cc8",
+      "title": "에이전트에게 보내기",
+      "description": "",
+      "status": "pending",
+      "order": 2,
+      "created_at": "2026-03-20",
+      "completed_at": ""
+    }
+  ]
+}

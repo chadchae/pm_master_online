@@ -1,0 +1,22 @@
+{
+  "subtasks": [
+    {
+      "id": "50d53836-03e4-40d6-aae2-478216912e0f",
+      "title": "개발시작",
+      "description": "",
+      "status": "done",
+      "order": 0,
+      "created_at": "2026-03-20",
+      "completed_at": "2026-03-20"
+    },
+    {
+      "id": "352071a2-e5b8-4dc0-b3d9-b148786c9b39",
+      "title": "개발완료",
+      "description": "",
+      "status": "done",
+      "order": 1,
+      "created_at": "2026-03-20",
+      "completed_at": "2026-03-20"
+    }
+  ]
+}

@@ -42,9 +42,11 @@ import {
 } from "lucide-react";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
+const MarkdownPreview = lazy(() => import("@uiw/react-markdown-preview"));
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { PeopleTagInput } from "@/components/PeopleTagInput";
+import { ConfirmDialog, PromptDialog } from "@/components/AppDialogs";
 import toast from "react-hot-toast";
 import { useLocale } from "@/lib/i18n";
 
@@ -117,6 +119,8 @@ export default function ProjectDetailPage() {
   const [editSubtaskTitle, setEditSubtaskTitle] = useState("");
   const [editSubtaskDesc, setEditSubtaskDesc] = useState("");
   const [dragSubtaskId, setDragSubtaskId] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [promptDialog, setPromptDialog] = useState<{ title: string; message?: string; placeholder?: string; defaultValue?: string; onConfirm: (value: string) => void } | null>(null);
 
   // Todo state
   interface TodoItem {
@@ -215,16 +219,21 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const deleteTodo = async (todoId: string) => {
-    if (!confirm(t("action.delete") + "?")) return;
-    try {
-      await apiFetch(`/api/projects/${encodeURIComponent(name)}/todos/${todoId}`, {
-        method: "DELETE",
-      });
-      loadTodos();
-    } catch {
-      toast.error(t("toast.failedToDelete"));
-    }
+  const deleteTodo = (todoId: string) => {
+    setConfirmDialog({
+      message: t("action.delete") + "?",
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        try {
+          await apiFetch(`/api/projects/${encodeURIComponent(name)}/todos/${todoId}`, {
+            method: "DELETE",
+          });
+          loadTodos();
+        } catch {
+          toast.error(t("toast.failedToDelete"));
+        }
+      },
+    });
   };
 
   const moveTodo = async (todoId: string, column: string, order: number) => {
@@ -689,16 +698,21 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const deleteComment = async (issueId: string, commentId: string) => {
-    if (!confirm(t("action.delete") + "?")) return;
-    try {
-      await apiFetch(`/api/projects/${encodeURIComponent(name)}/issues/${issueId}/comments/${commentId}`, {
-        method: "DELETE",
-      });
-      loadIssues();
-    } catch {
-      toast.error(t("toast.failedToDelete"));
-    }
+  const deleteComment = (issueId: string, commentId: string) => {
+    setConfirmDialog({
+      message: t("action.delete") + "?",
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        try {
+          await apiFetch(`/api/projects/${encodeURIComponent(name)}/issues/${issueId}/comments/${commentId}`, {
+            method: "DELETE",
+          });
+          loadIssues();
+        } catch {
+          toast.error(t("toast.failedToDelete"));
+        }
+      },
+    });
   };
 
   const filteredIssues = issues.filter((i) => {
@@ -937,17 +951,22 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const deleteSubtask = async (subtaskId: string) => {
-    if (!confirm(t("subtask.deleteConfirm"))) return;
-    try {
-      await apiFetch(
-        `/api/projects/${encodeURIComponent(name)}/subtasks/${subtaskId}`,
-        { method: "DELETE" }
-      );
-      await loadSubtasks();
-    } catch {
-      toast.error(t("toast.failedToDelete"));
-    }
+  const deleteSubtask = (subtaskId: string) => {
+    setConfirmDialog({
+      message: t("subtask.deleteConfirm"),
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        try {
+          await apiFetch(
+            `/api/projects/${encodeURIComponent(name)}/subtasks/${subtaskId}`,
+            { method: "DELETE" }
+          );
+          await loadSubtasks();
+        } catch {
+          toast.error(t("toast.failedToDelete"));
+        }
+      },
+    });
   };
 
   const handleSubtaskDragStart = (subtaskId: string) => {
@@ -1186,11 +1205,16 @@ export default function ProjectDetailPage() {
             </button>
             <button
               onClick={() => {
-                if (!confirm(`Move "${project.metadata?.label || name}" to trash?`)) return;
-                apiFetch("/api/projects/move", {
-                  method: "POST",
-                  body: JSON.stringify({ project_name: name, from_stage: project.stage, to_stage: "7_discarded", instruction: "" }),
-                }).then(() => { router.push("/dashboard"); toast.success("Moved to trash"); }).catch(() => toast.error("Failed"));
+                setConfirmDialog({
+                  message: `Move "${project.metadata?.label || name}" to trash?`,
+                  onConfirm: () => {
+                    setConfirmDialog(null);
+                    apiFetch("/api/projects/move", {
+                      method: "POST",
+                      body: JSON.stringify({ project_name: name, from_stage: project.stage, to_stage: "7_discarded", instruction: "" }),
+                    }).then(() => { router.push("/dashboard"); toast.success("Moved to trash"); }).catch(() => toast.error("Failed"));
+                  },
+                });
               }}
               className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500 transition-colors"
               title={t("action.delete")}
@@ -1311,15 +1335,20 @@ export default function ProjectDetailPage() {
               </button>
               {docSelectMode && docSelected.size > 0 && (
                 <button
-                  onClick={async () => {
-                    if (!confirm(`Delete ${docSelected.size} file(s)?`)) return;
-                    for (const f of docSelected) {
-                      try { await apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${f}` : f)}`, { method: "DELETE" }); } catch {}
-                    }
-                    setDocs((prev) => prev.filter((d) => !docSelected.has(d.filename)));
-                    if (selectedDoc && docSelected.has(selectedDoc)) { setSelectedDoc(null); setDocContent(""); }
-                    toast.success(`Deleted ${docSelected.size} file(s)`);
-                    setDocSelected(new Set()); setDocSelectMode(false);
+                  onClick={() => {
+                    setConfirmDialog({
+                      message: `Delete ${docSelected.size} file(s)?`,
+                      onConfirm: async () => {
+                        setConfirmDialog(null);
+                        for (const f of docSelected) {
+                          try { await apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${f}` : f)}`, { method: "DELETE" }); } catch {}
+                        }
+                        setDocs((prev) => prev.filter((d) => !docSelected.has(d.filename)));
+                        if (selectedDoc && docSelected.has(selectedDoc)) { setSelectedDoc(null); setDocContent(""); }
+                        toast.success(`Deleted ${docSelected.size} file(s)`);
+                        setDocSelected(new Set()); setDocSelectMode(false);
+                      },
+                    });
                   }}
                   className="flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:text-red-400 rounded ml-auto"
                 >
@@ -1357,14 +1386,19 @@ export default function ProjectDetailPage() {
                       onClick={() => {
                         const isFolder = (doc as any).is_folder;
                         const msg = isFolder ? `Delete folder "${doc.filename}" and all contents?` : `Delete "${doc.filename}"?`;
-                        if (!confirm(msg)) return;
-                        const path = docPath ? `${docPath}/${doc.filename}` : doc.filename;
-                        const url = isFolder
-                          ? `/api/projects/${encodeURIComponent(name)}/folders/${encodeURIComponent(path)}`
-                          : `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(path)}`;
-                        apiFetch(url, { method: "DELETE" })
-                          .then(() => { setDocs((p) => p.filter((d) => d.filename !== doc.filename)); if (selectedDoc === doc.filename) { setSelectedDoc(null); setDocContent(""); } toast.success("Deleted"); })
-                          .catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
+                        setConfirmDialog({
+                          message: msg,
+                          onConfirm: () => {
+                            setConfirmDialog(null);
+                            const path = docPath ? `${docPath}/${doc.filename}` : doc.filename;
+                            const url = isFolder
+                              ? `/api/projects/${encodeURIComponent(name)}/folders/${encodeURIComponent(path)}`
+                              : `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(path)}`;
+                            apiFetch(url, { method: "DELETE" })
+                              .then(() => { setDocs((p) => p.filter((d) => d.filename !== doc.filename)); if (selectedDoc === doc.filename) { setSelectedDoc(null); setDocContent(""); } toast.success("Deleted"); })
+                              .catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
+                          },
+                        });
                       }}
                       className="p-1.5 mr-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400 transition-all"
                     >
@@ -1449,7 +1483,7 @@ export default function ProjectDetailPage() {
                       <>
                         <button onClick={() => { setEditContent(docContent); setIsEditing(true); }} className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500" title="Edit"><Edit3 className="w-4 h-4" /></button>
                         <button
-                          onClick={() => { if (!confirm(`Delete "${selectedDoc}"?`)) return; setDeletingDoc(true); apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${selectedDoc}` : selectedDoc)}`, { method: "DELETE" }).then(() => { setDocs((p) => p.filter((d) => d.filename !== selectedDoc)); setSelectedDoc(null); setDocContent(""); toast.success("Deleted"); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed")).finally(() => setDeletingDoc(false)); }}
+                          onClick={() => { setConfirmDialog({ message: `Delete "${selectedDoc}"?`, onConfirm: () => { setConfirmDialog(null); setDeletingDoc(true); apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${selectedDoc}` : selectedDoc)}`, { method: "DELETE" }).then(() => { setDocs((p) => p.filter((d) => d.filename !== selectedDoc)); setSelectedDoc(null); setDocContent(""); toast.success("Deleted"); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed")).finally(() => setDeletingDoc(false)); } }); }}
                           disabled={deletingDoc}
                           className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500" title="Delete"
                         >
@@ -1463,6 +1497,13 @@ export default function ProjectDetailPage() {
                   {isEditing ? (
                     <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
                       <MDEditor value={editContent} onChange={(v) => setEditContent(v || "")} height="100%" preview="live" />
+                    </Suspense>
+                  ) : selectedDoc?.endsWith(".md") ? (
+                    <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+                      <MarkdownPreview
+                        source={docContent}
+                        style={{ padding: "1rem", backgroundColor: "transparent" }}
+                      />
                     </Suspense>
                   ) : (
                     <pre className="p-4 text-sm font-mono text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words">{docContent}</pre>
@@ -3066,10 +3107,16 @@ export default function ProjectDetailPage() {
                   value={["", "개인", "개발", "연구", "연구+개발"].includes(metaDraft.유형 || "") ? (metaDraft.유형 || "") : metaDraft.유형}
                   onChange={(e) => {
                     if (e.target.value === "__custom__") {
-                      const custom = prompt("새 유형 입력:");
-                      if (custom?.trim()) {
-                        setMetaDraft((d) => ({ ...d, 유형: custom.trim() }));
-                      }
+                      setPromptDialog({
+                        title: "Custom Type",
+                        placeholder: "Enter type...",
+                        onConfirm: (val) => {
+                          setPromptDialog(null);
+                          if (val.trim()) {
+                            setMetaDraft((d) => ({ ...d, 유형: val.trim() }));
+                          }
+                        },
+                      });
                     } else {
                       setMetaDraft((d) => ({ ...d, 유형: e.target.value }));
                     }
@@ -3478,6 +3525,23 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={!!confirmDialog}
+        message={confirmDialog?.message || ""}
+        variant="danger"
+        confirmLabel="Delete"
+        onConfirm={() => { confirmDialog?.onConfirm(); }}
+        onCancel={() => setConfirmDialog(null)}
+      />
+      <PromptDialog
+        open={!!promptDialog}
+        title={promptDialog?.title}
+        message={promptDialog?.message}
+        placeholder={promptDialog?.placeholder}
+        defaultValue={promptDialog?.defaultValue}
+        onConfirm={(val) => { promptDialog?.onConfirm(val); }}
+        onCancel={() => setPromptDialog(null)}
+      />
     </div>
   );
 }

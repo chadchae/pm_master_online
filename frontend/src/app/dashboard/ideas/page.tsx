@@ -15,10 +15,13 @@ import {
   Search,
   Plus,
   X,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { MetaTags } from "@/components/MetaTags";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
+import { ConfirmDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
 
 export default function IdeasPage() {
@@ -32,6 +35,9 @@ export default function IdeasPage() {
     toStage: string;
   } | null>(null);
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
+  const [sortKey, setSortKey] = useState("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [promoting, setPromoting] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState<string | null>(null);
   const [showNewIdea, setShowNewIdea] = useState(false);
@@ -40,6 +46,7 @@ export default function IdeasPage() {
   const [newDesc, setNewDesc] = useState("");
   const [newType, setNewType] = useState("");
   const [creating, setCreating] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
   useEffect(() => {
     loadIdeas();
@@ -103,8 +110,7 @@ export default function IdeasPage() {
     }
   };
 
-  const discardIdea = async (name: string) => {
-    if (!confirm(`Discard "${name}"? (moves to 7_discarded)`)) return;
+  const doDiscardIdea = async (name: string) => {
     setDiscarding(name);
     try {
       await apiFetch("/api/projects/move", {
@@ -122,6 +128,16 @@ export default function IdeasPage() {
     } finally {
       setDiscarding(null);
     }
+  };
+
+  const discardIdea = (name: string) => {
+    setConfirmDialog({
+      message: `Discard "${name}"? (moves to 7_discarded)`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doDiscardIdea(name);
+      },
+    });
   };
 
   const filtered = ideas.filter((p) =>
@@ -145,6 +161,26 @@ export default function IdeasPage() {
     "연구 + 개발 프로젝트": "border-l-violet-500",
     "Untyped": "border-l-neutral-300 dark:border-l-neutral-600",
   };
+
+  const toggleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    let va = "", vb = "";
+    switch (sortKey) {
+      case "name": va = (a.metadata?.label || a.name).toLowerCase(); vb = (b.metadata?.label || b.name).toLowerCase(); break;
+      case "type": va = a.metadata?.["유형"] || ""; vb = b.metadata?.["유형"] || ""; break;
+      case "created": va = a.metadata?.["작성일"] || ""; vb = b.metadata?.["작성일"] || ""; break;
+    }
+    const cmp = va.localeCompare(vb);
+    return sortDir === "asc" ? cmp : -cmp;
+  });
 
   if (loading) {
     return (
@@ -181,6 +217,30 @@ export default function IdeasPage() {
               placeholder={t("ideas.search")}
               className="w-full pl-9 pr-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
+          </div>
+          <div className="flex items-center bg-neutral-100 dark:bg-neutral-800 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode("kanban")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewMode === "kanban"
+                  ? "bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm"
+                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Cards
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                viewMode === "list"
+                  ? "bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-sm"
+                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300"
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              List
+            </button>
           </div>
           <button
             onClick={() => setShowNewIdea(!showNewIdea)}
@@ -229,7 +289,7 @@ export default function IdeasPage() {
         </div>
       )}
 
-      {/* Ideas Grid */}
+      {/* Ideas Content */}
       {filtered.length === 0 ? (
         <div className="text-center py-16">
           <Lightbulb className="w-12 h-12 mx-auto text-neutral-300 dark:text-neutral-600 mb-3" />
@@ -237,7 +297,7 @@ export default function IdeasPage() {
             {ideas.length === 0 ? t("ideas.noIdeas") : t("ideas.noMatching")}
           </p>
         </div>
-      ) : (
+      ) : viewMode === "kanban" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((idea) => {
             const typeClass = Object.entries(typeColors).find(
@@ -247,7 +307,7 @@ export default function IdeasPage() {
             return (
               <div
                 key={idea.name}
-                className={`bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 border-l-4 ${typeClass} overflow-hidden hover:shadow-md transition-shadow`}
+                className={`bg-white dark:bg-neutral-900 rounded-xl border border-neutral-300 dark:border-neutral-800 border-l-4 ${typeClass} overflow-hidden hover:shadow-md transition-shadow`}
               >
                 {/* Card Header */}
                 <div
@@ -301,7 +361,7 @@ export default function IdeasPage() {
                 </div>
 
                 {/* Card Actions */}
-                <div className="flex border-t border-neutral-100 dark:border-neutral-800">
+                <div className="flex border-t border-neutral-200 dark:border-neutral-800">
                   <button
                     onClick={() => setMoveModal({
                       projectName: idea.name,
@@ -318,7 +378,7 @@ export default function IdeasPage() {
                     )}
                     {t("ideas.promoteToInitiation")}
                   </button>
-                  <div className="w-px bg-neutral-100 dark:bg-neutral-800" />
+                  <div className="w-px bg-neutral-200 dark:bg-neutral-800" />
                   <button
                     onClick={() => discardIdea(idea.name)}
                     disabled={discarding === idea.name}
@@ -336,6 +396,101 @@ export default function IdeasPage() {
             );
           })}
         </div>
+      ) : (
+        /* List View */
+        <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-300 dark:border-neutral-800 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50">
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("name")}>
+                  <span className="inline-flex items-center gap-1">
+                    Project
+                    {sortKey === "name" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                  </span>
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("type")}>
+                  <span className="inline-flex items-center gap-1">
+                    Type
+                    {sortKey === "type" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                  </span>
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Tags</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("created")}>
+                  <span className="inline-flex items-center gap-1">
+                    Created
+                    {sortKey === "created" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                  </span>
+                </th>
+                <th className="text-right px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+              {sortedFiltered.map((idea) => (
+                <tr
+                  key={idea.name}
+                  onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(idea.name)}`)}
+                  className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors"
+                >
+                  <td className="px-4 py-3">
+                    <div>
+                      <p className="font-medium text-neutral-900 dark:text-white">
+                        {idea.metadata?.label || idea.name}
+                      </p>
+                      {idea.metadata?.label && (
+                        <p className="text-xs text-neutral-400 font-mono">{idea.name}</p>
+                      )}
+                      {idea.metadata?.description && (
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 line-clamp-1">
+                          {idea.metadata.description}
+                        </p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {idea.metadata?.["유형"] && (
+                      <span className="inline-flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                        <Tag className="w-3 h-3" />
+                        {idea.metadata["유형"]}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <MetaTags metadata={idea.metadata} compact />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                      {idea.metadata?.["작성일"] || "-"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => setMoveModal({
+                          projectName: idea.name,
+                          projectLabel: idea.metadata?.label,
+                          toStage: "2_initiation_stage",
+                        })}
+                        disabled={promoting === idea.name}
+                        className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded transition-colors disabled:opacity-40"
+                        title={t("ideas.promoteToInitiation")}
+                      >
+                        {promoting === idea.name ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => discardIdea(idea.name)}
+                        disabled={discarding === idea.name}
+                        className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-colors disabled:opacity-40"
+                        title="Discard"
+                      >
+                        {discarding === idea.name ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {/* Move Modal */}
       {moveModal && (
@@ -348,6 +503,14 @@ export default function IdeasPage() {
           onMoved={loadIdeas}
         />
       )}
+      <ConfirmDialog
+        open={!!confirmDialog}
+        message={confirmDialog?.message || ""}
+        variant="danger"
+        confirmLabel="Discard"
+        onConfirm={() => { confirmDialog?.onConfirm(); }}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </div>
   );
 }

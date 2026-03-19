@@ -6,6 +6,7 @@ import { apiFetch, Project } from "@/lib/api";
 import { getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
 import { Loader2, Search, FolderOpen, ArrowUpDown, ArrowUp, ArrowDown, Plus } from "lucide-react";
 import { MetaTags } from "@/components/MetaTags";
+import { NewProjectDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
 import toast from "react-hot-toast";
 
@@ -20,6 +21,7 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [showNewProject, setShowNewProject] = useState(false);
 
   useEffect(() => {
     apiFetch<{ projects: Project[] }>("/api/projects")
@@ -101,19 +103,7 @@ export default function ProjectsPage() {
         <div className="flex items-center gap-3">
           <span className="text-xs text-neutral-400">{filtered.length} projects</span>
           <button
-            onClick={() => {
-              const folder = prompt(t("ideas.folderName"));
-              if (!folder?.trim()) return;
-              const label = prompt(t("ideas.displayName")) || folder;
-              apiFetch("/api/projects/create", {
-                method: "POST",
-                body: JSON.stringify({
-                  folder_name: folder.trim().toLowerCase().replace(/\s+/g, "-"),
-                  label,
-                  stage: "2_initiation_stage",
-                }),
-              }).then(() => { window.location.reload(); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
-            }}
+            onClick={() => setShowNewProject(true)}
             className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -199,6 +189,27 @@ export default function ProjectsPage() {
           </tbody>
         </table>
       </div>
+      <NewProjectDialog
+        open={showNewProject}
+        onCancel={() => setShowNewProject(false)}
+        onConfirm={async (data) => {
+          setShowNewProject(false);
+          try {
+            await apiFetch("/api/projects/create", {
+              method: "POST",
+              body: JSON.stringify({
+                folder_name: data.folder,
+                label: data.label,
+                project_type: data.projectType,
+                stage: "2_initiation_stage",
+              }),
+            });
+            window.location.reload();
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Failed");
+          }
+        }}
+      />
     </div>
   );
 }

@@ -1,277 +1,218 @@
-# Next.js + FastAPI Full-Stack Starter Template
+# Project Manager
 
-Production-ready full-stack starter template with built-in authentication, session-based data isolation, async background processing, and step-by-step workflow infrastructure.
+Local-first project management dashboard for `~/Projects/`. Manages project lifecycle from idea to completion with kanban boards, schedule/gantt charts, document management, and issue tracking.
 
 ## Prerequisites
 
-- Python 3.12+
-- Node.js 18+
+- **macOS** (uses `lsof` for port management)
+- **Python 3.12+**
+- **Node.js 18+**
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/ChadApplication/_template.git
-cd _template
-./setup.sh          # One-command setup (venv + npm + DB + seed)
+./setup.sh          # One-command setup (venv + npm install)
 ./run.sh start      # Start servers
 ```
 
-Open http://localhost:3001 and log in with `admin` / `admin`.
+Open http://localhost:3002 and log in with `admin` / `admin`.
 
-### Default Accounts
+## Installation on Another Machine
+
+### 1. Create project folder structure
+
+```bash
+mkdir -p ~/Projects/{1_idea_stage,2_initiation_stage,3_in_development,4_in_testing,5_completed,6_archived,7_discarded,_notes,_learning,_issues_common}
+```
+
+### 2. Clone or copy the app
+
+Place `project-manager` anywhere on disk (e.g., inside `~/Projects/3_in_development/` or a separate directory).
+
+### 3. Run setup
+
+```bash
+cd project-manager
+./setup.sh
+./run.sh start
+```
+
+### 4. Custom project root (optional)
+
+If your projects live somewhere other than `~/Projects`:
+
+```bash
+export PROJECTS_ROOT="/path/to/my/projects"
+./run.sh start
+```
+
+### 5. Custom ports (optional)
+
+Default: backend `8002`, frontend `3002`. To override:
+
+```bash
+echo "BACKEND_PORT=8010" > .run_ports
+echo "FRONTEND_PORT=3010" >> .run_ports
+```
+
+Or the app auto-finds free ports if defaults are taken.
+
+## Required Folder Structure
+
+The app scans `~/Projects/` (or `$PROJECTS_ROOT`) for these stage folders:
+
+```
+~/Projects/
+  1_idea_stage/           # Ideas and brainstorming
+  2_initiation_stage/     # Initiated projects (Discussion)
+  3_in_development/       # Active development
+  4_in_testing/           # Testing / Analysis phase
+  5_completed/            # Completed / Writing phase
+  6_archived/             # Archived / Submitted
+  7_discarded/            # Trash
+  _notes/                 # Personal notes
+  _learning/              # Learning logs
+  _issues_common/         # Cross-project issue records
+```
+
+Each project is a subfolder within a stage folder. Projects are moved between stages via drag-and-drop or the move dialog.
+
+## Data Storage
+
+All app data is stored locally in `backend/data/`:
+
+| Data | Path | Description |
+|------|------|-------------|
+| Schedules | `backend/data/schedules/*.json` | Gantt tasks, milestones, categories per project |
+| Todos | `backend/data/todos/*.json` | Kanban todo items per project |
+| Issues | `backend/data/issues/*.json` | Issue tracker per project |
+| Subtasks | `backend/data/subtasks/*.json` | Project subtasks |
+| Users | `backend/data/users.json` | Login accounts (bcrypt hashed) |
+| Card order | `backend/data/card_order.json` | Dashboard kanban card positions |
+| People | `backend/data/people.json` | People directory |
+
+To migrate data to another machine, copy the `backend/data/` directory.
+
+## Default Accounts
 
 | Username | Password | Role |
 |----------|----------|------|
 | admin | admin | ADMIN |
 | guest | guest | GUEST |
 
-### Commands
+## Commands
 
 ```bash
-./run.sh start      # Start Backend + Frontend
+./run.sh start      # Start backend + frontend
 ./run.sh stop       # Stop all servers
-./run.sh restart    # Restart
+./run.sh restart    # Restart both servers
+./run.sh status     # Check server status
 ./run.sh live       # Start + live log streaming
 ```
 
+## Features
+
+### Dashboard
+- Kanban board with 5-stage project lifecycle
+- Drag-and-drop between stages with move instructions
+- Card/list view toggle with column sorting
+- Type filter: Personal, Research, Development, Other
+- Dashboard theme selector (A/B/C/D for light and dark modes)
+- Active project summary with colored badges
+
+### Project Detail
+- **Settings**: Project metadata (type, importance, severity, urgency, collaboration, people)
+- **Documents**: File browser with markdown editor and rendered preview
+- **Todos**: Kanban board (todo / in_progress / done)
+- **Issues**: Issue tracker with comments and timeline
+- **Schedule**: Task management with table and gantt chart views
+- **Work Orders**: Work instruction documents
+
+### Schedule / Gantt
+- Task CRUD with assignee, dates, status, categories, dependencies
+- Gantt chart with category tracks, dependency arrows, today line
+- Milestones with diamond markers on gantt
+- Parent task auto-date calculation
+- 30-color category palette with auto-assignment
+- Category rename and delete management
+- Duration calculation (inclusive start/end dates)
+
+### Ideas Page
+- Separate idea management with card/list view
+- Promote ideas to initiation stage
+- Sortable columns (name, type, importance, severity, urgency)
+
+### UI/UX
+- Dark/light theme with `next-themes`
+- In-app modal dialogs (no browser prompt/confirm)
+- Markdown file rendering with `@uiw/react-markdown-preview`
+- Print/PDF export for documents
+- Multi-language support (i18n)
+
 ## Tech Stack
-- **Backend:** Python 3.12 / FastAPI
-- **Frontend:** Next.js 15 (App Router) / React 19 / TailwindCSS / TypeScript
-- **Database:** Prisma ORM / SQLite (default)
-- **Auth:** NextAuth.js (Credentials Provider)
 
----
-
-## Core Features
-
-### 1. Authentication (NextAuth + Prisma)
-- Email/password login and registration
-- `User` model for account management
-- Unified auth sessions across client and server components
-- **Bearer token authentication** — backend `verify_token()` extracts user_id from `Authorization: Bearer {user_id}` header
-- **401 auto-redirect** — unauthenticated requests return 401, frontend automatically redirects to `/login`
-- **No anonymous fallback** — `mock_token` or missing tokens are rejected (prevents data contamination)
-
-### 2. Session-Based Project Management
-- Each "new analysis" creates a unique `session_id` directory at `temp_uploads/{user_id}/{session_id}/`
-- **Project metadata**: Card view on dashboard with title, description, creation date, last modified date
-- **Step completion tracking**: `GET /api/session/status` auto-detects which steps have results
-- **Per-step reset**: `DELETE /api/step/{step}` clears specific step data without affecting others
-- **Per-step restore**: `GET /api/step/{step}/results` returns cached results for instant UI restoration
-- **Variable persistence**: `POST/GET /api/variables` saves and restores variable definitions per session
-
-### 3. Async Background Processing
-- **Fire-and-forget pattern** — long-running LLM endpoints return `{status: "processing"}` immediately
-- **Background task tracking** — `llm_tasks` dict keyed by `"{user_id}:{step}"` prevents cross-step state pollution
-- **Progress polling** — `GET /api/progress?step=X` returns real-time progress + task completion status
-- **User-level locking** — `asyncio.Lock` per user prevents concurrent destructive operations
-- **tqdm integration** — progress updates are monkey-patched to write `progress.json` for frontend polling
-- **Proxy timeout** — `next.config.ts` sets `proxyTimeout: 300_000` (5 min) for long requests
-
-### 4. CSV Safety
-- **Global `to_csv` monkey-patch** — all `DataFrame.to_csv()` calls automatically use `quoting=csv.QUOTE_ALL`
-- Prevents `need to escape, but no escapechar set` errors with special characters in data
-
-### 5. Session Export/Import
-- **Full backup export** — download entire session as a ZIP file (all data, results, configs)
-- **Session import/restore** — upload a backup ZIP to create or restore a project
-- **Path traversal protection** — ZIP extraction validates paths to prevent directory escape
-
-### 6. User Profile & Settings
-- **Password change** — users can change their password via the profile modal
-- **UserSettings backend save** — settings are persisted to the backend API (not just sessionStorage)
-- **Session-scoped LLM settings** — each session stores its own LLM provider, model, and API key
-
-### 7. UI/UX
-- **Multi-language (i18n)**: Korean, English, Chinese via user settings or browser cookie
-- **Dark Mode**: `next-themes` with no hydration flash
-- **In-app Toast**: `react-hot-toast` for all feedback messages
-- **Activity Tracker**: Logs page visits, button clicks, IP/UserAgent to DB
-- **Landing page**: Login and register forms are always visible (no toggle needed)
-
-### 8. API Proxy & Infrastructure
-- **Next.js rewrites** proxy `/api/*` to FastAPI backend (port auto-detected from `.run_ports`)
-- **Backend port discovery** — `run.sh` finds free ports, writes `.run_ports`, frontend reads it
-- **Log capture** — `uvicorn.run(main.app)` pattern (not `-m uvicorn`) for proper stdout capture
-- **Logs in /tmp** — avoids Dropbox/cloud sync interference with log buffering
-
----
-
-## API Endpoints
-
-### Session Management
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/sessions` | Create new session |
-| GET | `/api/sessions` | List all sessions for user |
-| DELETE | `/api/sessions/{session_id}` | Delete session |
-| GET | `/api/session/status` | Step completion status |
-
-### Step Data (per analysis step)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/step/{step}/results` | Get cached step results |
-| DELETE | `/api/step/{step}` | Delete step-specific files |
-| GET | `/api/progress?step=X` | Progress + task status |
-
-### Data Persistence
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/variables` | Save variable definitions |
-| GET | `/api/variables` | Load variable definitions |
-| POST | `/api/research-info` | Save research metadata |
-| GET | `/api/research-info` | Load research metadata |
-
-### User Settings
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/settings` | Get user settings |
-| POST | `/api/settings` | Save user settings |
-
----
-
-## Quick Start
-
-### 1. Clone and configure
-```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-```
-
-### 2. Backend setup
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 3. Frontend setup
-```bash
-cd frontend
-npm install
-npx prisma db push
-npx prisma generate
-```
-
-### 4. Run both servers
-```bash
-./run.sh start
-```
-
-### Default ports
-- **Frontend:** http://localhost:3001
-- **Backend:** http://localhost:8001
-- **API Docs:** http://localhost:8001/docs
-
-### Other commands
-```bash
-./run.sh stop      # Stop all servers
-./run.sh restart   # Restart all servers
-./run.sh status    # Check server status
-./run.sh live      # Stream live logs
-```
-
----
+- **Backend**: Python 3.12 / FastAPI / JSON file storage
+- **Frontend**: Next.js 15 (App Router) / React 19 / TailwindCSS / TypeScript
+- **Auth**: JWT (bcrypt + PyJWT)
+- **Editor**: @uiw/react-md-editor
+- **Markdown**: @uiw/react-markdown-preview
+- **Icons**: Lucide React
+- **Notifications**: react-hot-toast
 
 ## Architecture
 
 ```
-_template_latest/
+project-manager/
 ├── backend/
-│   ├── main.py                    # FastAPI app + session infrastructure
-│   ├── app/
-│   │   └── routers/
-│   │       └── session.py         # Session CRUD (Bearer auth)
+│   ├── main.py                     # FastAPI app + all endpoints
 │   ├── services/
-│   │   └── user_settings_service.py
-│   ├── temp_uploads/              # Per-user, per-session data (gitignored)
-│   │   └── {user_id}/
-│   │       └── {session_id}/
-│   │           ├── variables.json
-│   │           ├── research_info.json
-│   │           ├── *_results.csv
-│   │           └── progress.json
+│   │   ├── scanner_service.py      # Project scanning and metadata
+│   │   ├── schedule_service.py     # Schedule/gantt/milestone/category
+│   │   ├── todo_service.py         # Todo kanban
+│   │   ├── issue_service.py        # Issue tracker
+│   │   ├── subtask_service.py      # Project subtasks
+│   │   ├── document_service.py     # Document file management
+│   │   ├── server_service.py       # Server control (run.sh)
+│   │   ├── common_folder_service.py # Notes/learning/issues folders
+│   │   ├── people_service.py       # People directory
+│   │   └── auth_service.py         # JWT authentication
+│   ├── data/                       # All JSON data (gitignored)
+│   ├── requirements.txt
 │   └── venv/
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── dashboard/         # Session list + create
-│   │   │   ├── analysis/[id]/     # Workspace (analysis steps)
-│   │   │   ├── login/
-│   │   │   └── admin/
+│   │   │   ├── dashboard/          # Main dashboard
+│   │   │   │   ├── page.tsx        # Kanban + list view
+│   │   │   │   ├── ideas/          # Ideas management
+│   │   │   │   ├── projects/       # Project list + detail
+│   │   │   │   ├── [type]/         # Notes/learning/issues
+│   │   │   │   ├── servers/        # Server status
+│   │   │   │   ├── people/         # People directory
+│   │   │   │   ├── timeline/       # Timeline view
+│   │   │   │   └── trash/          # Discarded projects
+│   │   │   └── layout.tsx
 │   │   ├── components/
-│   │   ├── services/
-│   │   │   └── sessionApi.ts      # Bearer auth + 401 redirect
-│   │   └── auth.ts                # NextAuth config
-│   ├── next.config.ts             # Proxy rewrites + 300s timeout
-│   └── package.json
-├── run.sh                         # Start/stop/restart/live
+│   │   │   ├── AppDialogs.tsx      # ConfirmDialog, PromptDialog, NewProjectDialog
+│   │   │   ├── Sidebar.tsx         # Navigation
+│   │   │   ├── PageHeader.tsx      # Top header
+│   │   │   ├── MoveProjectModal.tsx
+│   │   │   ├── MetaTags.tsx        # Project meta badges
+│   │   │   ├── ProgressBar.tsx     # Subtask progress
+│   │   │   └── ...
+│   │   └── lib/
+│   │       ├── api.ts              # API client with auth
+│   │       ├── stages.ts           # Stage configuration
+│   │       ├── i18n.ts             # Internationalization
+│   │       └── useAuth.ts          # Auth hook
+│   ├── package.json
+│   └── next.config.ts
+├── docs/
+├── run.sh                          # Start/stop/restart/live
+├── setup.sh                        # One-command installation
+├── CHANGELOG.md
 └── .gitignore
 ```
-
----
-
-## Adding New Analysis Steps
-
-To add a new step to the workflow:
-
-1. **Backend**: Add service function with `(user_id, session_id, ...)` signature
-2. **Backend**: Add endpoint in `main.py` using `_run_llm_in_background()` for async processing
-3. **Frontend**: Create component with `getToken` prop, `restoredOnce` restore guard, `handleReset` with backend DELETE
-4. **Frontend**: Add progress polling with `step=your_step_name` parameter
-5. **Backend**: The `GET /api/session/status` and `DELETE /api/step/{step}` endpoints auto-detect files matching `*_results.csv`/`*_results.json`
-
----
-
-## Key Patterns
-
-### Authentication flow
-```
-Frontend getToken() → session.user.id
-    ↓
-Authorization: Bearer {user_id}
-    ↓
-Backend verify_token() → {"sub": user_id}
-    ↓
-401 if missing/invalid → Frontend redirects to /login
-```
-
-### Async processing flow
-```
-POST /api/your-endpoint → returns {status: "processing"} immediately
-    ↓
-Background: _run_llm_in_background(user_id, "step_name", service_fn, ...)
-    ↓
-Frontend polls: GET /api/progress?step=step_name
-    ↓
-{status: "complete", result: {...}} or {status: "error", error: "..."}
-```
-
-### Session data isolation
-```
-temp_uploads/
-├── user_abc/
-│   ├── session_001/     ← isolated workspace
-│   │   ├── variables.json
-│   │   └── step_results.csv
-│   └── session_002/     ← separate workspace
-│       └── ...
-└── user_xyz/            ← different user, no cross-access
-    └── ...
-```
-
-## Changelog
-
-### v0.0.1 (2026-03-17)
-
-- Initial public release
-- macOS bash 3.2 compatibility fix (run.sh)
-- Python 3.12.8 migration
-- DB seed automation (admin/guest accounts via setup.sh)
-- dev.db removed from git tracking
-- Copyright footer with auto-version
-- setup.sh one-command installation
 
 ## License
 

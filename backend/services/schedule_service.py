@@ -117,6 +117,19 @@ def create_task(project_name: str, task_data: dict[str, Any]) -> dict[str, Any]:
                 task["end_date"] = task["start_date"]
             task["duration_days"] = _calc_duration(task["start_date"], task["end_date"])
 
+    # Auto-adjust start_date based on parent_id end_date + 1
+    if task["parent_id"] and not task["depends_on"]:
+        parent_task = next((t for t in tasks if t["id"] == task["parent_id"]), None)
+        if parent_task and parent_task.get("end_date"):
+            from datetime import timedelta
+            parent_end = datetime.strptime(parent_task["end_date"], "%Y-%m-%d").date()
+            new_start = parent_end + timedelta(days=1)
+            if not task_data.get("start_date"):  # Only if start_date wasn't explicitly set
+                task["start_date"] = str(new_start)
+                if task["end_date"] and task["end_date"] < task["start_date"]:
+                    task["end_date"] = task["start_date"]
+                task["duration_days"] = _calc_duration(task["start_date"], task["end_date"])
+
     tasks.append(task)
     data["tasks"] = tasks
     _save_schedule(project_name, data)

@@ -57,7 +57,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [docs, setDocs] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"documents" | "instructions" | "todo" | "issues" | "schedule" | "settings">("documents");
+  const [activeTab, setActiveTab] = useState<"documents" | "instructions" | "todo" | "issues" | "schedule" | "settings">("settings");
   const [newInstruction, setNewInstruction] = useState("");
   const [newChecklist, setNewChecklist] = useState("");
   const [savingInstruction, setSavingInstruction] = useState(false);
@@ -537,15 +537,21 @@ export default function ProjectDetailPage() {
   // Category CRUD
   const createCategory = async () => {
     if (!newCatName.trim()) return;
+    const createdName = newCatName.trim();
     try {
       await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/categories`, {
         method: "POST",
-        body: JSON.stringify({ name: newCatName.trim(), color: newCatColor }),
+        body: JSON.stringify({ name: createdName, color: newCatColor }),
       });
       setNewCatName("");
       setNewCatColor("#6b7280");
       setShowNewCategory(false);
       loadSchedule();
+      if (editingSchedId) {
+        setEditSchedCategory(createdName);
+      } else {
+        setNewSchedCategory(createdName);
+      }
     } catch {
       toast.error(t("toast.failedToCreate"));
     }
@@ -1233,7 +1239,7 @@ export default function ProjectDetailPage() {
       {/* Tabs */}
       <div className="border-b border-neutral-200 dark:border-neutral-800">
         <nav className="flex gap-4">
-          {(["documents", "instructions", "todo", "issues", "schedule", "settings"] as const).map((tab) => (
+          {(["settings", "documents", "todo", "issues", "schedule", "instructions"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2190,30 +2196,20 @@ export default function ProjectDetailPage() {
                   placeholder={t("schedule.assignee")}
                   className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
                 />
-                <input
-                  type="date"
-                  value={newSchedStart}
-                  onChange={(e) => setNewSchedStart(e.target.value)}
-                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
-                />
-                <input
-                  type="date"
-                  value={newSchedEnd}
-                  onChange={(e) => setNewSchedEnd(e.target.value)}
-                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
-                />
-                <select
-                  value={newSchedStatus}
-                  onChange={(e) => setNewSchedStatus(e.target.value)}
-                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
-                >
-                  <option value="planned">{t("schedule.planned")}</option>
-                  <option value="in_progress">{t("schedule.inProgress")}</option>
-                  <option value="done">{t("schedule.done")}</option>
-                </select>
                 <select
                   value={newSchedParent}
-                  onChange={(e) => setNewSchedParent(e.target.value)}
+                  onChange={(e) => {
+                    setNewSchedParent(e.target.value);
+                    if (e.target.value) {
+                      const parent = scheduleTasks.find(st => st.id === e.target.value);
+                      if (parent?.end_date) {
+                        const parentEnd = new Date(parent.end_date);
+                        parentEnd.setDate(parentEnd.getDate() + 1);
+                        const newStart = parentEnd.toISOString().split("T")[0];
+                        setNewSchedStart(newStart);
+                      }
+                    }
+                  }}
                   className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
                 >
                   <option value="">{t("schedule.parentTask")} (--)</option>
@@ -2241,6 +2237,27 @@ export default function ProjectDetailPage() {
                     <option value="__new__">+ {t("schedule.newCategory")}</option>
                   </select>
                 </div>
+                <input
+                  type="date"
+                  value={newSchedStart}
+                  onChange={(e) => setNewSchedStart(e.target.value)}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                />
+                <input
+                  type="date"
+                  value={newSchedEnd}
+                  onChange={(e) => setNewSchedEnd(e.target.value)}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                />
+                <select
+                  value={newSchedStatus}
+                  onChange={(e) => setNewSchedStatus(e.target.value)}
+                  className="px-3 py-2 text-sm border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                >
+                  <option value="planned">{t("schedule.planned")}</option>
+                  <option value="in_progress">{t("schedule.inProgress")}</option>
+                  <option value="done">{t("schedule.done")}</option>
+                </select>
               </div>
               {/* New category inline form */}
               {showNewCategory && (
@@ -2389,6 +2406,9 @@ export default function ProjectDetailPage() {
                       <span className="text-amber-600 dark:text-amber-400">&#9670;</span>
                       <span className="font-medium text-neutral-700 dark:text-neutral-300">{ms.title}</span>
                       <span className="text-neutral-500 dark:text-neutral-400">({ms.date})</span>
+                      {ms.description && (
+                        <span className="text-neutral-400 dark:text-neutral-500 ml-1">— {ms.description}</span>
+                      )}
                       <button
                         onClick={() => deleteMilestone(ms.id)}
                         className="text-neutral-400 hover:text-red-500 ml-1"
@@ -2733,6 +2753,9 @@ export default function ProjectDetailPage() {
                           <span className="text-amber-600 dark:text-amber-400">&#9670;</span>
                           <span className="font-medium text-neutral-700 dark:text-neutral-300">{ms.title}</span>
                           <span className="text-neutral-500 dark:text-neutral-400">({ms.date})</span>
+                          {ms.description && (
+                            <span className="text-neutral-400 dark:text-neutral-500 ml-1">— {ms.description}</span>
+                          )}
                           <button onClick={() => deleteMilestone(ms.id)} className="text-neutral-400 hover:text-red-500 ml-1">
                             <X className="w-3 h-3" />
                           </button>
@@ -2915,9 +2938,9 @@ export default function ProjectDetailPage() {
                                           style={{ width: `${task.progress_pct}%` }}
                                         />
                                       )}
-                                      {barWidth > 60 && (
+                                      {barWidth > 40 && (
                                         <span className="absolute inset-0 flex items-center px-1 text-[9px] text-white font-medium truncate">
-                                          {task.title}
+                                          {task.title}{barWidth > 80 ? ` (${task.duration_days}d)` : ""}
                                         </span>
                                       )}
                                     </div>
@@ -3040,11 +3063,13 @@ export default function ProjectDetailPage() {
                   Type
                 </label>
                 <select
-                  value={metaDraft.유형 || ""}
+                  value={["", "개인", "개발", "연구", "연구+개발"].includes(metaDraft.유형 || "") ? (metaDraft.유형 || "") : metaDraft.유형}
                   onChange={(e) => {
                     if (e.target.value === "__custom__") {
                       const custom = prompt("새 유형 입력:");
-                      if (custom?.trim()) setMetaDraft((d) => ({ ...d, 유형: custom.trim() }));
+                      if (custom?.trim()) {
+                        setMetaDraft((d) => ({ ...d, 유형: custom.trim() }));
+                      }
                     } else {
                       setMetaDraft((d) => ({ ...d, 유형: e.target.value }));
                     }
@@ -3052,9 +3077,13 @@ export default function ProjectDetailPage() {
                   className="w-full px-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
                   <option value="">Not set</option>
+                  <option value="개인">개인</option>
                   <option value="개발">개발</option>
                   <option value="연구">연구</option>
                   <option value="연구+개발">연구+개발</option>
+                  {metaDraft.유형 && !["", "개인", "개발", "연구", "연구+개발"].includes(metaDraft.유형) && (
+                    <option value={metaDraft.유형}>{metaDraft.유형}</option>
+                  )}
                   <option value="__custom__">+ 직접 입력</option>
                 </select>
               </div>

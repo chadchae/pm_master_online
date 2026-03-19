@@ -29,6 +29,8 @@ export default function DashboardPage() {
   const [cardOrder, setCardOrder] = useState<Record<string, string[]>>({});
   const [dragOverCard, setDragOverCard] = useState<string | null>(null);
   const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<string>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     loadData();
@@ -51,21 +53,32 @@ export default function DashboardPage() {
     }
   };
 
+  // Fixed type order and normalization
+  const TYPE_ORDER = ["개인", "연구", "개발", "기타"];
+  const allTypesSet = new Set(
+    projects
+      .filter((p) => p.stage !== "1_idea_stage")
+      .map((p) => p.metadata?.["유형"] || "")
+      .filter(Boolean)
+  );
+  const normalizeType = (t: string) => {
+    if (TYPE_ORDER.slice(0, 3).includes(t)) return t;
+    if (t.includes("연구") && t.includes("개발")) return "연구";
+    return "기타";
+  };
+  const allTypes = TYPE_ORDER.filter((t) => {
+    if (t === "기타") return [...allTypesSet].some((ut) => normalizeType(ut) === "기타");
+    return [...allTypesSet].some((ut) => normalizeType(ut) === t);
+  });
+
   // Filter out idea-stage projects for kanban (ideas have their own page)
   const kanbanProjects = projects.filter((p) => {
     if (p.stage === "1_idea_stage") return false;
     if (typeFilters.size === 0) return true; // No filter = show all
     const pType = p.metadata?.["유형"] || "";
-    return typeFilters.has(pType);
+    const normalized = normalizeType(pType);
+    return typeFilters.has(normalized);
   });
-
-  // Collect unique types for filter checkboxes
-  const allTypes = [...new Set(
-    projects
-      .filter((p) => p.stage !== "1_idea_stage")
-      .map((p) => p.metadata?.["유형"] || "")
-      .filter(Boolean)
-  )];
   const ideaCount = projects.filter((p) => p.stage === "1_idea_stage").length;
 
   // Group projects by stage (kanban only), apply saved card order
@@ -157,6 +170,7 @@ export default function DashboardPage() {
   const getTypeBadge = (type?: string) => {
     if (!type) return null;
     const colorMap: Record<string, string> = {
+      "개인": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
       "연구": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
       "개발": "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
       "연구+개발": "bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300",
@@ -167,6 +181,29 @@ export default function DashboardPage() {
       </span>
     );
   };
+
+  // Sort toggle for list view
+  const toggleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  // Sorted projects for list view
+  const sortedListProjects = [...kanbanProjects].sort((a, b) => {
+    let va = "", vb = "";
+    switch (sortKey) {
+      case "name": va = (a.metadata?.label || a.name).toLowerCase(); vb = (b.metadata?.label || b.name).toLowerCase(); break;
+      case "stage": va = a.stage; vb = b.stage; break;
+      case "type": va = a.metadata?.유형 || ""; vb = b.metadata?.유형 || ""; break;
+      case "created": va = a.metadata?.작성일 || ""; vb = b.metadata?.작성일 || ""; break;
+    }
+    const cmp = va.localeCompare(vb);
+    return sortDir === "asc" ? cmp : -cmp;
+  });
 
   if (loading) {
     return (
@@ -201,21 +238,31 @@ export default function DashboardPage() {
               <FolderKanban className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-neutral-900 dark:text-white">{kanbanProjects.length}</p>
+              <p className="text-2xl font-bold text-neutral-900 dark:text-white">
+                {projects.filter((p) => p.stage !== "1_idea_stage").length}
+              </p>
               <p className="text-sm text-neutral-500 dark:text-neutral-400">{t("dashboard.activeProjects")}</p>
-              <p className="text-xs text-neutral-400 mt-0.5">
+              <div className="flex flex-wrap gap-1 mt-1">
                 {(() => {
                   const all = projects.filter((p) => p.stage !== "1_idea_stage");
-                  const research = all.filter((p) => (p.metadata?.["유형"] || "").includes("연구")).length;
-                  const dev = all.filter((p) => p.metadata?.["유형"] === "개발").length;
-                  const etc = all.length - research - dev;
-                  const parts = [];
-                  if (research) parts.push(`연구: ${research}`);
-                  if (dev) parts.push(`개발: ${dev}`);
-                  if (etc > 0) parts.push(`기타: ${etc}`);
-                  return parts.join(" | ");
+                  const counts: Record<string, number> = {};
+                  for (const p of all) {
+                    const nt = normalizeType(p.metadata?.["유형"] || "");
+                    counts[nt] = (counts[nt] || 0) + 1;
+                  }
+                  const colorMap: Record<string, string> = {
+                    "개인": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+                    "연구": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300",
+                    "개발": "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+                    "기타": "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+                  };
+                  return TYPE_ORDER.filter((t) => counts[t]).map((t) => (
+                    <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${colorMap[t]}`}>
+                      {t} {counts[t]}
+                    </span>
+                  ));
                 })()}
-              </p>
+              </div>
             </div>
           </div>
         </div>
@@ -504,16 +551,36 @@ export default function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50">
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("dashboard.project")}</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("dashboard.stage")}</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("dashboard.type")}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("name")}>
+                    <span className="inline-flex items-center gap-1">
+                      {t("dashboard.project")}
+                      {sortKey === "name" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("stage")}>
+                    <span className="inline-flex items-center gap-1">
+                      {t("dashboard.stage")}
+                      {sortKey === "stage" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("type")}>
+                    <span className="inline-flex items-center gap-1">
+                      {t("dashboard.type")}
+                      {sortKey === "type" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("dashboard.tags")}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider w-32">{t("dashboard.progress")}</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t("dashboard.created")}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("created")}>
+                    <span className="inline-flex items-center gap-1">
+                      {t("dashboard.created")}
+                      {sortKey === "created" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {kanbanProjects.map((project) => {
+                {sortedListProjects.map((project) => {
                   const pStage = getStageByFolder(project.stage);
                   return (
                     <tr

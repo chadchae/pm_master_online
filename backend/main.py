@@ -909,6 +909,28 @@ def resolve_issue(project_name: str, issue_id: str):
     return issue
 
 
+class CommentUpdateRequest(BaseModel):
+    content: str
+
+
+@app.put("/api/projects/{project_name}/issues/{issue_id}/comments/{comment_id}")
+def update_issue_comment(project_name: str, issue_id: str, comment_id: str, body: CommentUpdateRequest):
+    """Update a comment."""
+    issue = issue_service.update_comment(project_name, issue_id, comment_id, body.content)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    return issue
+
+
+@app.delete("/api/projects/{project_name}/issues/{issue_id}/comments/{comment_id}")
+def delete_issue_comment(project_name: str, issue_id: str, comment_id: str):
+    """Delete a comment."""
+    issue = issue_service.delete_comment(project_name, issue_id, comment_id)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    return issue
+
+
 # --- People endpoints ---
 
 class PersonCreateRequest(BaseModel):

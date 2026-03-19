@@ -1,0 +1,56 @@
+{
+  "issues": [
+    {
+      "id": "c41bd394-d91d-49f9-9ec7-cf847e23ffca",
+      "title": "할일이 너무 많음",
+      "description": "조난 많음",
+      "status": "in_progress",
+      "priority": "high",
+      "labels": [],
+      "assignee": "채드",
+      "created_at": "2026-03-19",
+      "updated_at": "2026-03-19",
+      "resolved_at": "2026-03-19",
+      "comments": [
+        {
+          "id": "a154c5c6-eca3-4380-a219-9c27d7976a43",
+          "author": "Chad",
+          "content": "그럼 일을 하면 됨",
+          "created_at": "2026-03-19 22:37"
+        },
+        {
+          "id": "6849f3ad-d828-46d7-9081-b85664caaa26",
+          "author": "Chad",
+          "content": "뭐라 하셨음?",
+          "created_at": "2026-03-19 22:38"
+        }
+      ]
+    },
+    {
+      "id": "d50fcb1f-be3b-402e-be25-a1ebff149c7a",
+      "title": "아 아....버전2",
+      "description": "그러게",
+      "status": "resolved",
+      "priority": "critical",
+      "labels": [],
+      "assignee": "채드",
+      "created_at": "2026-03-19",
+      "updated_at": "2026-03-19",
+      "resolved_at": "",
+      "comments": [
+        {
+          "id": "a836a6ec-36a6-4b34-9741-b2e78c5e1ad8",
+          "author": "Chad",
+          "content": "하자 씨바",
+          "created_at": "2026-03-19 22:39"
+        },
+        {
+          "id": "81a5347a-eb15-40b6-9a76-868f5d5c3962",
+          "author": "Chad",
+          "content": "그러게",
+          "created_at": "2026-03-19 22:39"
+        }
+      ]
+    }
+  ]
+}

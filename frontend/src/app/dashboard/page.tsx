@@ -4,7 +4,7 @@ import { useEffect, useState, DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, Project, ServerStatus } from "@/lib/api";
 import { STAGES, KANBAN_STAGES, getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
-import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List } from "lucide-react";
+import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock } from "lucide-react";
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
@@ -347,6 +347,12 @@ export default function DashboardPage() {
                                 </span>
                               )}
                             </div>
+                            {project.metadata?.["목표종료일"] && (
+                              <p className="text-xs text-neutral-400 mt-0.5 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {project.metadata["목표종료일"]}
+                              </p>
+                            )}
                             {project.metadata?.related_people && (
                               <p className="text-xs text-neutral-400 mt-0.5 truncate">
                                 {project.metadata.related_people}

@@ -237,8 +237,8 @@ def scan_projects() -> list[dict[str, Any]]:
                 continue
             if item.name.startswith("."):
                 continue
-            # Skip common folders at the root level
-            if item.name in COMMON_FOLDERS:
+            # Skip common folders and _prefixed folders (meta folders)
+            if item.name in COMMON_FOLDERS or item.name.startswith("_"):
                 continue
 
             project: dict[str, Any] = {

@@ -114,6 +114,39 @@ def add_comment(
     return None
 
 
+def update_comment(
+    project_name: str, issue_id: str, comment_id: str, content: str
+) -> dict[str, Any] | None:
+    """Update a comment's content."""
+    data = _load_issues(project_name)
+    for issue in data["issues"]:
+        if issue["id"] == issue_id:
+            for comment in issue["comments"]:
+                if comment["id"] == comment_id:
+                    comment["content"] = content
+                    comment["edited_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    issue["updated_at"] = str(date.today())
+                    _save_issues(project_name, data)
+                    return issue
+    return None
+
+
+def delete_comment(
+    project_name: str, issue_id: str, comment_id: str
+) -> dict[str, Any] | None:
+    """Delete a comment from an issue."""
+    data = _load_issues(project_name)
+    for issue in data["issues"]:
+        if issue["id"] == issue_id:
+            original = len(issue["comments"])
+            issue["comments"] = [c for c in issue["comments"] if c["id"] != comment_id]
+            if len(issue["comments"]) < original:
+                issue["updated_at"] = str(date.today())
+                _save_issues(project_name, data)
+                return issue
+    return None
+
+
 def resolve_issue(project_name: str, issue_id: str) -> dict[str, Any] | None:
     """Set issue status to resolved and record resolved_at timestamp."""
     data = _load_issues(project_name)

@@ -277,6 +277,15 @@ def scan_projects() -> list[dict[str, Any]]:
             # Get last modified
             project["last_modified"] = _get_last_modified(item)
 
+            # Inject real subtask counts (overrides metadata values)
+            try:
+                from services import subtask_service
+                counts = subtask_service.get_counts(item.name)
+                project["metadata"]["subtasks_total"] = str(counts.get("total", 0))
+                project["metadata"]["subtasks_done"] = str(counts.get("done", 0))
+            except Exception:
+                pass
+
             projects.append(project)
 
     return projects

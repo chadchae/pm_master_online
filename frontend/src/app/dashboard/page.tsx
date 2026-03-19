@@ -177,10 +177,8 @@ export default function DashboardPage() {
   // Filter out idea-stage projects for kanban (ideas have their own page)
   const kanbanProjects = projects.filter((p) => {
     if (p.stage === "1_idea_stage") return false;
-    if (typeFilters.size === 0) return true; // No filter = show all
-    const pType = p.metadata?.["유형"] || "";
-    const normalized = normalizeType(pType);
-    return typeFilters.has(normalized);
+    if (typeFilters.size === 0) return true;
+    return typeFilters.has(p.metadata?.["유형"] || "");
   });
   const ideaCount = projects.filter((p) => p.stage === "1_idea_stage").length;
 
@@ -306,6 +304,7 @@ export default function DashboardPage() {
       case "severity": va = a.metadata?.["위급도"] || ""; vb = b.metadata?.["위급도"] || ""; break;
       case "urgency": va = a.metadata?.["긴급도"] || ""; vb = b.metadata?.["긴급도"] || ""; break;
       case "created": va = a.metadata?.작성일 || ""; vb = b.metadata?.작성일 || ""; break;
+      case "modified": va = a.last_modified || ""; vb = b.last_modified || ""; break;
     }
     const cmp = va.localeCompare(vb);
     return sortDir === "asc" ? cmp : -cmp;
@@ -424,93 +423,20 @@ export default function DashboardPage() {
               {t("projects.newProject")}
             </button>
           </div>
-          {/* Type filter checkboxes — always show all 4 + management */}
-          <div className="flex items-center gap-2 mr-3">
-              {TYPE_ORDER.map((type) => {
-                // Collect actual type names that map to this normalized type
-                const actualTypes = [...new Set(
-                  projects
-                    .filter((p) => p.stage !== "1_idea_stage")
-                    .map((p) => p.metadata?.["유형"] || "")
-                    .filter((t) => normalizeType(t) === type && t !== "")
-                )];
-                return (
-                  <span key={type} className="inline-flex items-center gap-1">
-                    <label className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={typeFilters.has(type)}
-                        onChange={() => {
-                          setTypeFilters((prev) => {
-                            const next = new Set(prev);
-                            next.has(type) ? next.delete(type) : next.add(type);
-                            return next;
-                          });
-                        }}
-                        className="w-3.5 h-3.5 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      {type}
-                    </label>
-                    {type !== "기타" && actualTypes.length > 0 && (
-                      <>
-                        <button
-                          onClick={() => {
-                            const targetType = actualTypes.length === 1 ? actualTypes[0] : type;
-                            setPromptDialog({
-                              title: `Rename Type "${targetType}"`,
-                              defaultValue: targetType,
-                              onConfirm: async (newName) => {
-                                setPromptDialog(null);
-                                if (newName.trim() && newName.trim() !== targetType) {
-                                  try {
-                                    await apiFetch("/api/projects/rename-type", {
-                                      method: "PUT",
-                                      body: JSON.stringify({ old_type: targetType, new_type: newName.trim() }),
-                                    });
-                                    loadData();
-                                    toast.success(`Renamed "${targetType}" → "${newName.trim()}"`);
-                                  } catch { toast.error("Failed to rename"); }
-                                }
-                              },
-                            });
-                          }}
-                          className="text-neutral-400 hover:text-indigo-500 transition-colors"
-                          title={`Rename ${type}`}
-                        >
-                          <Pencil className="w-2.5 h-2.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            const targetType = actualTypes.length === 1 ? actualTypes[0] : type;
-                            setConfirmDialog({
-                              message: `Delete type "${targetType}" from all projects?`,
-                              onConfirm: async () => {
-                                setConfirmDialog(null);
-                                try {
-                                  await apiFetch(`/api/projects/delete-type/${encodeURIComponent(targetType)}`, { method: "DELETE" });
-                                  loadData();
-                                  toast.success(`Deleted type "${targetType}"`);
-                                } catch { toast.error("Failed to delete"); }
-                              },
-                            });
-                          }}
-                          className="text-neutral-400 hover:text-red-500 transition-colors"
-                          title={`Delete ${type}`}
-                        >
-                          <X className="w-2.5 h-2.5" />
-                        </button>
-                      </>
-                    )}
-                  </span>
-                );
-              })}
+          {/* Type filter — show all actual types with rename/delete */}
+          <div className="flex items-center gap-2 mr-3 flex-wrap">
+              {[...new Set(projects.filter((p) => p.stage !== "1_idea_stage").map((p) => p.metadata?.["유형"] || "").filter(Boolean))].sort().map((type) => (
+                <span key={type} className="inline-flex items-center gap-1">
+                  <label className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400 cursor-pointer select-none">
+                    <input type="checkbox" checked={typeFilters.has(type)} onChange={() => { setTypeFilters((prev) => { const next = new Set(prev); next.has(type) ? next.delete(type) : next.add(type); return next; }); }} className="w-3.5 h-3.5 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500" />
+                    {type}
+                  </label>
+                  <button onClick={() => { setPromptDialog({ title: `Rename "${type}"`, defaultValue: type, onConfirm: async (newName) => { setPromptDialog(null); if (newName.trim() && newName.trim() !== type) { try { await apiFetch("/api/projects/rename-type", { method: "PUT", body: JSON.stringify({ old_type: type, new_type: newName.trim() }) }); loadData(); toast.success(`Renamed → "${newName.trim()}"`); } catch { toast.error("Failed"); } } } }); }} className="text-neutral-400 hover:text-indigo-500" title="Rename"><Pencil className="w-2.5 h-2.5" /></button>
+                  <button onClick={() => { setConfirmDialog({ message: `Delete type "${type}" from all projects?`, onConfirm: async () => { setConfirmDialog(null); try { await apiFetch(`/api/projects/delete-type/${encodeURIComponent(type)}`, { method: "DELETE" }); loadData(); toast.success("Deleted"); } catch { toast.error("Failed"); } } }); }} className="text-neutral-400 hover:text-red-500" title="Delete"><X className="w-2.5 h-2.5" /></button>
+                </span>
+              ))}
               {typeFilters.size > 0 && (
-                <button
-                  onClick={() => setTypeFilters(new Set())}
-                  className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
-                >
-                  ×
-                </button>
+                <button onClick={() => setTypeFilters(new Set())} className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">×</button>
               )}
           </div>
           <div className="flex items-center bg-neutral-100 dark:bg-neutral-800 rounded-lg p-0.5">
@@ -653,6 +579,9 @@ export default function DashboardPage() {
                                   )}
                                 </span>
                               )}
+                              {project.last_modified && (
+                                <span className="text-xs text-green-600 dark:text-green-400" title="Last modified">{project.last_modified.split("T")[0]}</span>
+                              )}
                               {project.metadata?.포트 && (
                                 <span className="text-xs text-neutral-400">:{project.metadata.포트}</span>
                               )}
@@ -766,8 +695,14 @@ export default function DashboardPage() {
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider w-32">{t("dashboard.progress")}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("created")}>
                     <span className="inline-flex items-center gap-1">
-                      {t("dashboard.created")}
+                      Created
                       {sortKey === "created" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("modified")}>
+                    <span className="inline-flex items-center gap-1">
+                      Modified
+                      {sortKey === "modified" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
                 </tr>
@@ -818,6 +753,9 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs">
                         {project.metadata?.작성일 || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs">
+                        {project.last_modified ? project.last_modified.split("T")[0] : "-"}
                       </td>
                     </tr>
                   );

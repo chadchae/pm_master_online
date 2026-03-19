@@ -17,11 +17,12 @@ import {
   X,
   LayoutGrid,
   List,
+  Pencil,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { MetaTags } from "@/components/MetaTags";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
-import { ConfirmDialog } from "@/components/AppDialogs";
+import { ConfirmDialog, PromptDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
 
 export default function IdeasPage() {
@@ -47,6 +48,7 @@ export default function IdeasPage() {
   const [newType, setNewType] = useState("");
   const [creating, setCreating] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [promptDialog, setPromptDialog] = useState<{ title: string; defaultValue?: string; onConfirm: (val: string) => void } | null>(null);
   const [typeFilters, setTypeFilters] = useState<Set<string>>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("pm_ideaTypeFilters");
@@ -164,7 +166,7 @@ export default function IdeasPage() {
       (p.metadata?.description || "").toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
     if (typeFilters.size === 0) return true;
-    return typeFilters.has(normalizeType(p.metadata?.["유형"] || ""));
+    return typeFilters.has(p.metadata?.["유형"] || "");
   });
 
   // Group by type
@@ -202,6 +204,7 @@ export default function IdeasPage() {
       case "severity": va = a.metadata?.["위급도"] || ""; vb = b.metadata?.["위급도"] || ""; break;
       case "urgency": va = a.metadata?.["긴급도"] || ""; vb = b.metadata?.["긴급도"] || ""; break;
       case "created": va = a.metadata?.["작성일"] || ""; vb = b.metadata?.["작성일"] || ""; break;
+      case "modified": va = a.last_modified || ""; vb = b.last_modified || ""; break;
     }
     const cmp = va.localeCompare(vb);
     return sortDir === "asc" ? cmp : -cmp;
@@ -267,29 +270,6 @@ export default function IdeasPage() {
               List
             </button>
           </div>
-          {/* Type filter checkboxes */}
-          <div className="flex items-center gap-2">
-            {TYPE_ORDER.map((type) => (
-              <label key={type} className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={typeFilters.has(type)}
-                  onChange={() => {
-                    setTypeFilters((prev) => {
-                      const next = new Set(prev);
-                      next.has(type) ? next.delete(type) : next.add(type);
-                      return next;
-                    });
-                  }}
-                  className="w-3.5 h-3.5 rounded border-neutral-300 text-amber-600 focus:ring-amber-500"
-                />
-                {type}
-              </label>
-            ))}
-            {typeFilters.size > 0 && (
-              <button onClick={() => setTypeFilters(new Set())} className="text-xs text-neutral-400 hover:text-neutral-600">×</button>
-            )}
-          </div>
           <button
             onClick={() => setShowNewIdea(!showNewIdea)}
             className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 transition-colors"
@@ -298,6 +278,24 @@ export default function IdeasPage() {
             {showNewIdea ? t("common.cancel") : t("ideas.newIdea")}
           </button>
         </div>
+      </div>
+
+      {/* Type filter row — show all actual types */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-neutral-500 dark:text-neutral-400">Type:</span>
+        {[...new Set(ideas.map((p) => p.metadata?.["유형"] || "").filter(Boolean))].sort().map((type) => (
+          <span key={type} className="inline-flex items-center gap-1">
+            <label className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400 cursor-pointer select-none">
+              <input type="checkbox" checked={typeFilters.has(type)} onChange={() => { setTypeFilters((prev) => { const next = new Set(prev); next.has(type) ? next.delete(type) : next.add(type); return next; }); }} className="w-3.5 h-3.5 rounded border-neutral-300 text-amber-600 focus:ring-amber-500" />
+              {type}
+            </label>
+            <button onClick={() => { setPromptDialog({ title: `Rename "${type}"`, defaultValue: type, onConfirm: async (newName) => { setPromptDialog(null); if (newName.trim() && newName.trim() !== type) { try { await apiFetch("/api/projects/rename-type", { method: "PUT", body: JSON.stringify({ old_type: type, new_type: newName.trim() }) }); loadIdeas(); toast.success(`Renamed → "${newName.trim()}"`); } catch { toast.error("Failed"); } } } }); }} className="text-neutral-400 hover:text-indigo-500" title="Rename"><Pencil className="w-2.5 h-2.5" /></button>
+            <button onClick={() => { setConfirmDialog({ message: `Delete type "${type}" from all projects?`, onConfirm: async () => { setConfirmDialog(null); try { await apiFetch(`/api/projects/delete-type/${encodeURIComponent(type)}`, { method: "DELETE" }); loadIdeas(); toast.success("Deleted"); } catch { toast.error("Failed"); } } }); }} className="text-neutral-400 hover:text-red-500" title="Delete"><X className="w-2.5 h-2.5" /></button>
+          </span>
+        ))}
+        {typeFilters.size > 0 && (
+          <button onClick={() => setTypeFilters(new Set())} className="text-xs text-neutral-400 hover:text-neutral-600">×</button>
+        )}
       </div>
 
       {/* New Idea Form */}
@@ -381,12 +379,16 @@ export default function IdeasPage() {
                     <MetaTags metadata={idea.metadata} />
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                    {idea.metadata?.["유형"] && (
-                      <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                        <Tag className="w-3 h-3" />
-                        {idea.metadata["유형"]}
-                      </span>
-                    )}
+                    {idea.metadata?.["유형"] && (() => {
+                      const t = idea.metadata["유형"];
+                      const colors: Record<string, string> = {
+                        "개인": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
+                        "연구": "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
+                        "개발": "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+                        "사업": "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+                      };
+                      return <span className={`text-xs px-1.5 py-0.5 rounded ${colors[t] || "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"}`}>{t}</span>;
+                    })()}
                     {idea.metadata?.["포트"] && (
                       <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                         <Monitor className="w-3 h-3" />
@@ -397,6 +399,11 @@ export default function IdeasPage() {
                       <span className="inline-flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                         <Calendar className="w-3 h-3" />
                         {idea.metadata["작성일"]}
+                      </span>
+                    )}
+                    {idea.last_modified && (
+                      <span className="text-xs text-green-600 dark:text-green-400">
+                        {idea.last_modified.split("T")[0]}
                       </span>
                     )}
                     {idea.has_docs && (
@@ -486,6 +493,12 @@ export default function IdeasPage() {
                     {sortKey === "created" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                   </span>
                 </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("modified")}>
+                  <span className="inline-flex items-center gap-1">
+                    Modified
+                    {sortKey === "modified" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                  </span>
+                </th>
                 <th className="text-right px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -532,6 +545,9 @@ export default function IdeasPage() {
                     <span className="text-xs text-neutral-500 dark:text-neutral-400">
                       {idea.metadata?.["작성일"] || "-"}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">
+                    {idea.last_modified ? idea.last_modified.split("T")[0] : "-"}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
@@ -581,6 +597,13 @@ export default function IdeasPage() {
         confirmLabel="Discard"
         onConfirm={() => { confirmDialog?.onConfirm(); }}
         onCancel={() => setConfirmDialog(null)}
+      />
+      <PromptDialog
+        open={!!promptDialog}
+        title={promptDialog?.title || ""}
+        defaultValue={promptDialog?.defaultValue || ""}
+        onConfirm={(val) => { promptDialog?.onConfirm(val); }}
+        onCancel={() => setPromptDialog(null)}
       />
     </div>
   );

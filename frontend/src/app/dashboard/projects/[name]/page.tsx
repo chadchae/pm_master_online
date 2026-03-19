@@ -2739,10 +2739,9 @@ export default function ProjectDetailPage() {
                 minDate = minDateFull;
                 maxDate = maxDateFull;
               } else {
-                // Center on today
-                const halfRange = Math.floor(ganttRange / 2);
-                minDate = new Date(today.getTime() - halfRange * dayMs);
-                maxDate = new Date(today.getTime() + (ganttRange - halfRange) * dayMs);
+                // Today at left edge, show 2 days before for context
+                minDate = new Date(today.getTime() - 2 * dayMs);
+                maxDate = new Date(today.getTime() + (ganttRange - 2) * dayMs);
               }
 
               const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / dayMs) + 1;

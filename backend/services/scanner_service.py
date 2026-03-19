@@ -954,6 +954,79 @@ time: "{time_str}"
         return {"success": False, "message": f"Failed: {e}"}
 
 
+def scan_discussions() -> list[dict[str, Any]]:
+    """Scan all projects for _토의록.md and extract discussion entries."""
+    discussions: list[dict[str, Any]] = []
+
+    for stage_folder in STAGE_FOLDERS.values():
+        stage_path = PROJECTS_ROOT / stage_folder
+        if not stage_path.is_dir():
+            continue
+
+        for item in sorted(stage_path.iterdir()):
+            if not item.is_dir() or item.name.startswith("."):
+                continue
+            if item.name in COMMON_FOLDERS:
+                continue
+
+            discussion_file = item / "docs" / "_토의록.md"
+            if not discussion_file.is_file():
+                continue
+
+            try:
+                content = discussion_file.read_text(encoding="utf-8")
+                _parse_discussion_entries(content, item.name, discussions)
+            except (OSError, UnicodeDecodeError):
+                continue
+
+    # Sort by date descending
+    discussions.sort(key=lambda d: d.get("date", ""), reverse=True)
+    return discussions
+
+
+def _parse_discussion_entries(
+    content: str, project_name: str, discussions: list[dict[str, Any]]
+) -> None:
+    """Parse ## YYYY-MM-DD entries from _토의록.md content."""
+    lines = content.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # Match ## YYYY-MM-DD with optional (N) and title
+        heading_match = re.match(
+            r"^##\s+(\d{4}-\d{2}-\d{2})\s*(?:\(\d+\))?\s*(.*)", line.strip()
+        )
+        if heading_match:
+            date_str = heading_match.group(1)
+            title = heading_match.group(2).strip()
+
+            # Scan subsequent lines for metadata fields
+            time_val = ""
+            topic_val = ""
+            j = i + 1
+            while j < len(lines):
+                sub = lines[j].strip()
+                # Stop at next heading or empty section boundary
+                if sub.startswith("## ") or sub.startswith("# "):
+                    break
+                time_match = re.match(r"\*\*시간\*\*:\s*(.*)", sub)
+                if time_match:
+                    time_val = time_match.group(1).strip()
+                topic_match = re.match(r"\*\*주제\*\*:\s*(.*)", sub)
+                if topic_match:
+                    topic_val = topic_match.group(1).strip()
+                j += 1
+
+            discussions.append({
+                "project_name": project_name,
+                "date": date_str,
+                "title": title,
+                "time": time_val,
+                "topic": topic_val,
+            })
+        i += 1
+
+
 def scan_work_instructions() -> list[dict[str, Any]]:
     """Scan all projects for pending work instructions (unchecked items)."""
     instructions: list[dict[str, Any]] = []

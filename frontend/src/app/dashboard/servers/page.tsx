@@ -9,6 +9,8 @@ import {
   RotateCw,
   Circle,
   RefreshCw,
+  FileText,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useLocale } from "@/lib/i18n";
@@ -18,6 +20,9 @@ export default function ServersPage() {
   const [servers, setServers] = useState<ServerStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [logProject, setLogProject] = useState<string | null>(null);
+  const [logLines, setLogLines] = useState<string[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
 
   const loadServers = useCallback(async () => {
     try {
@@ -52,6 +57,34 @@ export default function ServersPage() {
       setActionLoading(null);
     }
   };
+
+  // Fetch logs for a project
+  const fetchLogs = useCallback(async (projectName: string) => {
+    setLogLoading(true);
+    try {
+      const data = await apiFetch<{ lines: string[]; project: string }>(
+        `/api/servers/${encodeURIComponent(projectName)}/logs?lines=100`
+      );
+      setLogLines(data.lines || []);
+    } catch {
+      setLogLines([]);
+    } finally {
+      setLogLoading(false);
+    }
+  }, []);
+
+  // Open log viewer
+  const openLogs = useCallback((projectName: string) => {
+    setLogProject(projectName);
+    fetchLogs(projectName);
+  }, [fetchLogs]);
+
+  // Auto-refresh logs every 5 seconds when panel is open
+  useEffect(() => {
+    if (!logProject) return;
+    const interval = setInterval(() => fetchLogs(logProject), 5000);
+    return () => clearInterval(interval);
+  }, [logProject, fetchLogs]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -184,6 +217,13 @@ export default function ServersPage() {
                         <RotateCw className="w-4 h-4" />
                       )}
                     </button>
+                    <button
+                      onClick={() => openLogs(server.project_name)}
+                      className="p-1.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-600 dark:text-indigo-400 transition-colors"
+                      title={t("server.viewLogs")}
+                    >
+                      <FileText className="w-4 h-4" />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -198,6 +238,46 @@ export default function ServersPage() {
           </tbody>
         </table>
       </div>
+      {/* Log viewer modal */}
+      {logProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-neutral-900 rounded-xl border border-neutral-700 w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-700">
+              <h3 className="text-sm font-medium text-neutral-200 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                {t("server.logs")} — {logProject}
+              </h3>
+              <button
+                onClick={() => setLogProject(null)}
+                className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Log content */}
+            <div className="flex-1 overflow-auto p-4">
+              {logLoading && logLines.length === 0 ? (
+                <div className="flex items-center justify-center h-32">
+                  <Loader2 className="w-5 h-5 animate-spin text-neutral-500" />
+                </div>
+              ) : logLines.length === 0 ? (
+                <p className="text-sm text-neutral-500 text-center py-8">
+                  {t("server.noLogs")}
+                </p>
+              ) : (
+                <pre className="text-xs font-mono text-green-400 whitespace-pre-wrap break-all leading-5">
+                  {logLines.join("\n")}
+                </pre>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="px-4 py-2 border-t border-neutral-700 text-xs text-neutral-500">
+              Auto-refreshing every 5s &middot; Last {logLines.length} lines
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

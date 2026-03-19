@@ -20,6 +20,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "sidebar.learning": "학습",
     "sidebar.issues": "이슈",
     "sidebar.guidelines": "가이드라인",
+    "sidebar.timeline": "타임라인",
     "sidebar.servers": "서버",
     "sidebar.people": "관계자",
     "sidebar.trash": "휴지통",
@@ -115,6 +116,25 @@ const translations: Record<Locale, Record<string, string>> = {
     "todo.noTasks": "작업 없음",
     "todo.assignee": "담당자",
     "todo.dueDate": "마감일",
+
+    // Issues
+    "project.issues": "이슈",
+    "issues.title": "이슈",
+    "issues.newIssue": "새 이슈",
+    "issues.all": "전체",
+    "issues.open": "열림",
+    "issues.inProgress": "진행 중",
+    "issues.resolved": "해결됨",
+    "issues.closed": "닫힘",
+    "issues.addComment": "댓글 추가",
+    "issues.resolve": "해결",
+    "issues.noIssues": "이슈 없음",
+    "issues.labels": "라벨",
+    "issues.comments": "댓글",
+    "issues.description": "설명",
+    "issues.priority": "우선순위",
+    "issues.assignee": "담당자",
+    "issues.status": "상태",
 
     // Ideas page
     "ideas.inPipeline": "아이디어 파이프라인",
@@ -253,6 +273,10 @@ const translations: Record<Locale, Record<string, string>> = {
     "auth.changePassword": "비밀번호 변경",
     "auth.change": "변경",
 
+    // Timeline
+    "timeline.title": "토의록 타임라인",
+    "timeline.noDiscussions": "토의록 없음",
+
     // Servers
     "servers.autoRefresh": "10초마다 자동 새로고침",
     "servers.project": "프로젝트",
@@ -265,6 +289,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "servers.stop": "정지",
     "servers.restart": "재시작",
     "servers.noServers": "설정된 서버 없음",
+    "server.logs": "로그",
+    "server.viewLogs": "로그 보기",
+    "server.noLogs": "로그 없음",
 
     // Move project modal
     "move.moveProject": "프로젝트 이동",
@@ -280,6 +307,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "breadcrumb.learning": "학습",
     "breadcrumb.issues": "이슈",
     "breadcrumb.guidelines": "가이드라인",
+    "breadcrumb.timeline": "타임라인",
     "breadcrumb.servers": "서버",
     "breadcrumb.people": "관계자",
     "breadcrumb.trash": "휴지통",
@@ -294,6 +322,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "sidebar.learning": "Learning",
     "sidebar.issues": "Issues",
     "sidebar.guidelines": "Guidelines",
+    "sidebar.timeline": "Timeline",
     "sidebar.servers": "Servers",
     "sidebar.people": "People",
     "sidebar.trash": "Trash",
@@ -389,6 +418,25 @@ const translations: Record<Locale, Record<string, string>> = {
     "todo.noTasks": "No tasks",
     "todo.assignee": "Assignee",
     "todo.dueDate": "Due date",
+
+    // Issues
+    "project.issues": "Issues",
+    "issues.title": "Issues",
+    "issues.newIssue": "New Issue",
+    "issues.all": "All",
+    "issues.open": "Open",
+    "issues.inProgress": "In Progress",
+    "issues.resolved": "Resolved",
+    "issues.closed": "Closed",
+    "issues.addComment": "Add Comment",
+    "issues.resolve": "Resolve",
+    "issues.noIssues": "No issues",
+    "issues.labels": "Labels",
+    "issues.comments": "Comments",
+    "issues.description": "Description",
+    "issues.priority": "Priority",
+    "issues.assignee": "Assignee",
+    "issues.status": "Status",
 
     // Ideas page
     "ideas.inPipeline": "ideas in pipeline",
@@ -527,6 +575,10 @@ const translations: Record<Locale, Record<string, string>> = {
     "auth.changePassword": "Change Password",
     "auth.change": "Change",
 
+    // Timeline
+    "timeline.title": "Discussion Timeline",
+    "timeline.noDiscussions": "No discussions",
+
     // Servers
     "servers.autoRefresh": "Auto-refreshes every 10 seconds",
     "servers.project": "Project",
@@ -539,6 +591,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "servers.stop": "Stop",
     "servers.restart": "Restart",
     "servers.noServers": "No servers configured",
+    "server.logs": "Logs",
+    "server.viewLogs": "View Logs",
+    "server.noLogs": "No logs",
 
     // Move project modal
     "move.moveProject": "Move Project",
@@ -554,6 +609,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "breadcrumb.learning": "Learning",
     "breadcrumb.issues": "Issues",
     "breadcrumb.guidelines": "Guidelines",
+    "breadcrumb.timeline": "Timeline",
     "breadcrumb.servers": "Servers",
     "breadcrumb.people": "People",
     "breadcrumb.trash": "Trash",

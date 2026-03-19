@@ -27,6 +27,13 @@ import {
   Folder,
   ChevronLeft,
   Pencil,
+  CircleDot,
+  CheckCircle,
+  XCircle,
+  MessageSquare,
+  Send,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
@@ -44,7 +51,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [docs, setDocs] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"documents" | "instructions" | "todo" | "settings">("documents");
+  const [activeTab, setActiveTab] = useState<"documents" | "instructions" | "todo" | "issues" | "settings">("documents");
   const [newInstruction, setNewInstruction] = useState("");
   const [newChecklist, setNewChecklist] = useState("");
   const [savingInstruction, setSavingInstruction] = useState(false);
@@ -249,12 +256,167 @@ export default function ProjectDetailPage() {
     return t("todo.medium");
   };
 
+  // Issue state
+  interface IssueComment {
+    id: string;
+    author: string;
+    content: string;
+    created_at: string;
+  }
+  interface IssueItem {
+    id: string;
+    title: string;
+    description: string;
+    status: "open" | "in_progress" | "resolved" | "closed";
+    priority: "low" | "medium" | "high" | "critical";
+    labels: string[];
+    assignee: string;
+    created_at: string;
+    updated_at: string;
+    resolved_at: string;
+    comments: IssueComment[];
+  }
+  const [issues, setIssues] = useState<IssueItem[]>([]);
+  const [issueFilter, setIssueFilter] = useState<"all" | "open" | "in_progress" | "resolved" | "closed">("all");
+  const [expandedIssue, setExpandedIssue] = useState<string | null>(null);
+  const [showNewIssue, setShowNewIssue] = useState(false);
+  const [newIssueTitle, setNewIssueTitle] = useState("");
+  const [newIssueDesc, setNewIssueDesc] = useState("");
+  const [newIssuePriority, setNewIssuePriority] = useState<"low" | "medium" | "high" | "critical">("medium");
+  const [newIssueLabels, setNewIssueLabels] = useState("");
+  const [newIssueAssignee, setNewIssueAssignee] = useState("");
+  const [newCommentText, setNewCommentText] = useState("");
+  const [changingStatus, setChangingStatus] = useState<string | null>(null);
+
+  const loadIssues = async () => {
+    try {
+      const res = await apiFetch<{ issues: IssueItem[] }>(
+        `/api/projects/${encodeURIComponent(name)}/issues`
+      );
+      setIssues(res.issues || []);
+      loadSummary();
+    } catch {}
+  };
+
+  const createIssue = async () => {
+    if (!newIssueTitle.trim()) return;
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/issues`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: newIssueTitle.trim(),
+          description: newIssueDesc.trim(),
+          priority: newIssuePriority,
+          labels: newIssueLabels.split(",").map((l) => l.trim()).filter(Boolean),
+          assignee: newIssueAssignee.trim(),
+        }),
+      });
+      setNewIssueTitle("");
+      setNewIssueDesc("");
+      setNewIssuePriority("medium");
+      setNewIssueLabels("");
+      setNewIssueAssignee("");
+      setShowNewIssue(false);
+      loadIssues();
+      toast.success(t("toast.created"));
+    } catch {
+      toast.error(t("toast.failedToCreate"));
+    }
+  };
+
+  const updateIssueStatus = async (issueId: string, status: string) => {
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/issues/${issueId}`, {
+        method: "PUT",
+        body: JSON.stringify({ status }),
+      });
+      setChangingStatus(null);
+      loadIssues();
+    } catch {
+      toast.error(t("toast.failedToSave"));
+    }
+  };
+
+  const resolveIssue = async (issueId: string) => {
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/issues/${issueId}/resolve`, {
+        method: "POST",
+      });
+      loadIssues();
+    } catch {
+      toast.error(t("toast.failedToSave"));
+    }
+  };
+
+  const deleteIssue = async (issueId: string) => {
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/issues/${issueId}`, {
+        method: "DELETE",
+      });
+      setExpandedIssue(null);
+      loadIssues();
+      toast.success(t("toast.deleted"));
+    } catch {
+      toast.error(t("toast.failedToDelete"));
+    }
+  };
+
+  const addComment = async (issueId: string) => {
+    if (!newCommentText.trim()) return;
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/issues/${issueId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ author: "Chad", content: newCommentText.trim() }),
+      });
+      setNewCommentText("");
+      loadIssues();
+    } catch {
+      toast.error(t("toast.failedToSave"));
+    }
+  };
+
+  const filteredIssues = issues.filter((i) => {
+    if (issueFilter === "all") return true;
+    return i.status === issueFilter;
+  });
+
+  const issueStatusIcon = (status: string) => {
+    switch (status) {
+      case "open": return <CircleDot className="w-4 h-4 text-blue-500" />;
+      case "in_progress": return <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />;
+      case "resolved": return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case "closed": return <XCircle className="w-4 h-4 text-neutral-400" />;
+      default: return <CircleDot className="w-4 h-4 text-blue-500" />;
+    }
+  };
+
+  const issueStatusLabel = (status: string) => {
+    switch (status) {
+      case "open": return t("issues.open");
+      case "in_progress": return t("issues.inProgress");
+      case "resolved": return t("issues.resolved");
+      case "closed": return t("issues.closed");
+      default: return status;
+    }
+  };
+
+  const issuePriorityClasses = (p: string) => {
+    switch (p) {
+      case "low": return "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400";
+      case "medium": return "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400";
+      case "high": return "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400";
+      case "critical": return "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400";
+      default: return "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400";
+    }
+  };
+
   useEffect(() => {
     loadProject();
   }, [name]);
 
   useEffect(() => {
     if (activeTab === "todo") loadTodos();
+    if (activeTab === "issues") loadIssues();
   }, [activeTab]);
 
   const loadDocs = async (path: string = docPath) => {
@@ -590,7 +752,7 @@ export default function ProjectDetailPage() {
       {/* Tabs */}
       <div className="border-b border-neutral-200 dark:border-neutral-800">
         <nav className="flex gap-4">
-          {(["documents", "instructions", "todo", "settings"] as const).map((tab) => (
+          {(["documents", "instructions", "todo", "issues", "settings"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -705,7 +867,18 @@ export default function ProjectDetailPage() {
                   </button>
                   {!docSelectMode && (
                     <button
-                      onClick={() => { if (!confirm(`Delete "${doc.filename}"?`)) return; apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${doc.filename}` : doc.filename)}`, { method: "DELETE" }).then(() => { setDocs((p) => p.filter((d) => d.filename !== doc.filename)); if (selectedDoc === doc.filename) { setSelectedDoc(null); setDocContent(""); } toast.success("Deleted"); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed")); }}
+                      onClick={() => {
+                        const isFolder = (doc as any).is_folder;
+                        const msg = isFolder ? `Delete folder "${doc.filename}" and all contents?` : `Delete "${doc.filename}"?`;
+                        if (!confirm(msg)) return;
+                        const path = docPath ? `${docPath}/${doc.filename}` : doc.filename;
+                        const url = isFolder
+                          ? `/api/projects/${encodeURIComponent(name)}/folders/${encodeURIComponent(path)}`
+                          : `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(path)}`;
+                        apiFetch(url, { method: "DELETE" })
+                          .then(() => { setDocs((p) => p.filter((d) => d.filename !== doc.filename)); if (selectedDoc === doc.filename) { setSelectedDoc(null); setDocContent(""); } toast.success("Deleted"); })
+                          .catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
+                      }}
                       className="p-1.5 mr-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400 transition-all"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from services import auth_service, scanner_service, document_service
 from services import common_folder_service, server_service, people_service
-from services import todo_service
+from services import todo_service, issue_service
 
 app = FastAPI(title="Project Manager", version="0.1.0")
 
@@ -674,6 +674,31 @@ def update_card_order(body: CardOrderRequest):
     return {"success": True}
 
 
+# --- Discussion timeline endpoint ---
+
+@app.get("/api/discussions/timeline")
+def discussions_timeline():
+    """Return a timeline of all discussion entries across projects."""
+    discussions = scanner_service.scan_discussions()
+    return {"discussions": discussions}
+
+
+# --- Server log endpoint ---
+
+@app.get("/api/servers/{project_name}/logs")
+def server_logs(project_name: str, lines: int = 100):
+    """Read last N lines from a project's backend log file."""
+    log_path = Path(f"/tmp/{project_name.lower()}_backend.log")
+    if not log_path.is_file():
+        return {"lines": [], "project": project_name}
+    try:
+        all_lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        tail = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        return {"lines": tail, "project": project_name}
+    except OSError:
+        return {"lines": [], "project": project_name}
+
+
 # --- Server control endpoints ---
 
 @app.get("/api/servers/status")
@@ -783,6 +808,12 @@ def get_project_summary(project_name: str):
     progress_count = len([i for i in items if i["column"] == "in_progress"])
     done_count = len([i for i in items if i["column"] == "done"])
     total = len(items)
+
+    issue_data = issue_service.list_issues(project_name)
+    issues_list = issue_data.get("issues", [])
+    open_issues = len([i for i in issues_list if i["status"] in ("open", "in_progress")])
+    resolved_issues = len([i for i in issues_list if i["status"] in ("resolved", "closed")])
+
     return {
         "todo": {
             "total": total,
@@ -791,9 +822,91 @@ def get_project_summary(project_name: str):
             "done": done_count,
             "progress_pct": round(done_count / total * 100) if total > 0 else 0,
         },
-        "issues": {"total": 0, "open": 0, "resolved": 0},  # Placeholder
+        "issues": {
+            "total": len(issues_list),
+            "open": open_issues,
+            "resolved": resolved_issues,
+        },
         "schedule": {"total": 0, "upcoming": 0, "overdue": 0},  # Placeholder
     }
+
+
+# --- Issue endpoints ---
+
+class IssueCreateRequest(BaseModel):
+    title: str
+    description: str = ""
+    status: str = "open"
+    priority: str = "medium"
+    labels: list[str] = []
+    assignee: str = ""
+
+
+class IssueUpdateRequest(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None
+    priority: str | None = None
+    labels: list[str] | None = None
+    assignee: str | None = None
+
+
+class IssueCommentRequest(BaseModel):
+    author: str
+    content: str
+
+
+@app.get("/api/projects/{project_name}/issues")
+def list_issues(project_name: str):
+    """List all issues for a project."""
+    data = issue_service.list_issues(project_name)
+    return data
+
+
+@app.post("/api/projects/{project_name}/issues")
+def create_issue(project_name: str, body: IssueCreateRequest):
+    """Create a new issue."""
+    issue = issue_service.create_issue(project_name, body.model_dump())
+    return issue
+
+
+@app.put("/api/projects/{project_name}/issues/{issue_id}")
+def update_issue(project_name: str, issue_id: str, body: IssueUpdateRequest):
+    """Update an issue."""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    issue = issue_service.update_issue(project_name, issue_id, updates)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return issue
+
+
+@app.delete("/api/projects/{project_name}/issues/{issue_id}")
+def delete_issue(project_name: str, issue_id: str):
+    """Delete an issue."""
+    success = issue_service.delete_issue(project_name, issue_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return {"success": True}
+
+
+@app.post("/api/projects/{project_name}/issues/{issue_id}/comments")
+def add_issue_comment(project_name: str, issue_id: str, body: IssueCommentRequest):
+    """Add a comment to an issue."""
+    issue = issue_service.add_comment(
+        project_name, issue_id, body.author, body.content
+    )
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return issue
+
+
+@app.post("/api/projects/{project_name}/issues/{issue_id}/resolve")
+def resolve_issue(project_name: str, issue_id: str):
+    """Resolve an issue."""
+    issue = issue_service.resolve_issue(project_name, issue_id)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return issue
 
 
 # --- People endpoints ---

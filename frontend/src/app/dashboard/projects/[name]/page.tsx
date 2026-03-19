@@ -2292,6 +2292,56 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
+          {/* Category Management */}
+          {categories.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">{t("schedule.category")}:</span>
+              {categories.map((cat) => (
+                <span key={cat.name} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                  <span className="text-neutral-700 dark:text-neutral-300">{cat.name}</span>
+                  <button
+                    onClick={() => {
+                      setPromptDialog({
+                        title: "Rename Category",
+                        message: `"${cat.name}"`,
+                        defaultValue: cat.name,
+                        onConfirm: async (newName) => {
+                          setPromptDialog(null);
+                          if (newName.trim() && newName.trim() !== cat.name) {
+                            try {
+                              await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/categories/${encodeURIComponent(cat.name)}`, {
+                                method: "PUT",
+                                body: JSON.stringify({ new_name: newName.trim() }),
+                              });
+                              loadSchedule();
+                            } catch { toast.error(t("toast.failedToSave")); }
+                          }
+                        },
+                      });
+                    }}
+                    className="text-neutral-400 hover:text-indigo-500 transition-colors"
+                    title={t("action.edit")}
+                  >
+                    <Pencil className="w-2.5 h-2.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setConfirmDialog({
+                        message: `Delete category "${cat.name}"? Tasks will become uncategorized.`,
+                        onConfirm: () => { setConfirmDialog(null); deleteCategory(cat.name); },
+                      });
+                    }}
+                    className="text-neutral-400 hover:text-red-500 transition-colors"
+                    title={t("action.delete")}
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Add Task Form */}
           {showAddTask && (
             <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 space-y-3">

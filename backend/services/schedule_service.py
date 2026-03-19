@@ -307,6 +307,24 @@ def create_category(
     return new_cat
 
 
+def rename_category(project_name: str, old_name: str, new_name: str) -> bool:
+    """Rename a category and update all tasks that reference it."""
+    data = _load_schedule(project_name)
+    categories = data.get("categories", [])
+    found = False
+    for cat in categories:
+        if cat["name"] == old_name:
+            cat["name"] = new_name
+            found = True
+            break
+    if found:
+        for task in data.get("tasks", []):
+            if task.get("category") == old_name:
+                task["category"] = new_name
+        _save_schedule(project_name, data)
+    return found
+
+
 def delete_category(project_name: str, category_name: str) -> bool:
     """Delete a category and clear it from tasks."""
     data = _load_schedule(project_name)

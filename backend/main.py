@@ -1142,6 +1142,19 @@ def delete_category(project_name: str, category_name: str):
     return {"success": True}
 
 
+class CategoryRenameRequest(BaseModel):
+    new_name: str
+
+
+@app.put("/api/projects/{project_name}/schedule/categories/{category_name}")
+def rename_category(project_name: str, category_name: str, body: CategoryRenameRequest):
+    """Rename a schedule category."""
+    success = schedule_service.rename_category(project_name, category_name, body.new_name)
+    if not success:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"success": True}
+
+
 # --- Download project ---
 
 @app.get("/api/projects/{project_name}/download")

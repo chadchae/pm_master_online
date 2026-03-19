@@ -17,6 +17,7 @@ import {
   Eye,
   Folder,
   ChevronLeft,
+  Printer,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ConfirmDialog } from "@/components/AppDialogs";
@@ -549,6 +550,21 @@ export default function CommonFolderPage() {
                       title="Edit"
                     >
                       <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const printWin = window.open("", "_blank");
+                        if (!printWin) return;
+                        const contentEl = document.querySelector("[data-color-mode] .wmde-markdown") as HTMLElement;
+                        const rawContent = contentEl?.innerHTML || `<pre style="white-space:pre-wrap;font-family:monospace;">${content.replace(/</g,"&lt;")}</pre>`;
+                        printWin.document.write(`<!DOCTYPE html><html><head><title>${selectedFile}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a;line-height:1.6}h1,h2,h3{margin-top:1.5em}pre{background:#f5f5f5;padding:12px;border-radius:6px;overflow-x:auto}code{background:#f5f5f5;padding:2px 4px;border-radius:3px;font-size:0.9em}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}img{max-width:100%}@media print{body{margin:0}}</style></head><body>${rawContent}</body></html>`);
+                        printWin.document.close();
+                        setTimeout(() => { printWin.print(); }, 300);
+                      }}
+                      className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500 transition-colors"
+                      title="Print / Save as PDF"
+                    >
+                      <Printer className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => {

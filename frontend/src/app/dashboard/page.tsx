@@ -482,11 +482,19 @@ export default function DashboardPage() {
                                 <span className="text-xs text-neutral-400">:{project.metadata.포트}</span>
                               )}
                             </div>
-                            {project.metadata?.related_people && (
-                              <p className="text-xs text-neutral-400 mt-0.5 truncate">
-                                {project.metadata.related_people}
-                              </p>
-                            )}
+                            {(project.metadata?.["오너"] || project.metadata?.related_people) && (() => {
+                              const owner = project.metadata?.["오너"] || "";
+                              const allPeople = (project.metadata?.related_people || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+                              const others = allPeople.filter((p: string) => p !== owner);
+                              return (
+                                <div className="text-xs mt-0.5 truncate">
+                                  {owner && <span className="font-semibold text-neutral-600 dark:text-neutral-300">{owner}</span>}
+                                  {others.length > 0 && (
+                                    <p className="text-neutral-400 truncate">{others.join(", ")}</p>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                         {/* Action buttons */}

@@ -12,6 +12,8 @@ import {
   Terminal,
   ExternalLink,
   X,
+  ArrowUpDown,
+  ChevronDown,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useLocale } from "@/lib/i18n";
@@ -26,6 +28,9 @@ export default function ServersPage() {
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logLoading, setLogLoading] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const [sortKey, setSortKey] = useState<string>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortOpen, setSortOpen] = useState(false);
 
   const loadServers = useCallback(async () => {
     try {
@@ -135,6 +140,35 @@ export default function ServersPage() {
     }
   };
 
+  const SORT_OPTIONS = [
+    { key: "name", label: "Name" },
+    { key: "status", label: "Status" },
+    { key: "backend_port", label: "Backend Port" },
+    { key: "frontend_port", label: "Frontend Port" },
+  ];
+
+  const sortedServers = [...servers].sort((a, b) => {
+    let cmp = 0;
+    switch (sortKey) {
+      case "name":
+        cmp = (a.label || a.project_name).localeCompare(b.label || b.project_name);
+        break;
+      case "status": {
+        const aRunning = a.backend_alive || a.frontend_alive ? 1 : 0;
+        const bRunning = b.backend_alive || b.frontend_alive ? 1 : 0;
+        cmp = bRunning - aRunning; // running first by default
+        break;
+      }
+      case "backend_port":
+        cmp = (a.backend_port || 0) - (b.backend_port || 0);
+        break;
+      case "frontend_port":
+        cmp = (a.frontend_port || 0) - (b.frontend_port || 0);
+        break;
+    }
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
   const runningCount = servers.filter((s) => s.backend_alive || s.frontend_alive).length;
   const stoppedCount = servers.length - runningCount;
 
@@ -193,6 +227,45 @@ export default function ServersPage() {
           <span className="text-xs text-neutral-400">
             {runningCount} running / {stoppedCount} stopped
           </span>
+          {/* Sort dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setSortOpen(!sortOpen)}
+              className="flex items-center gap-1.5 text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
+            >
+              <ArrowUpDown className="w-4 h-4" />
+              Sort
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {sortOpen && (
+              <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg z-10 py-1">
+                {SORT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => {
+                      if (sortKey === opt.key) {
+                        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+                      } else {
+                        setSortKey(opt.key);
+                        setSortDir("asc");
+                      }
+                      setSortOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors flex items-center justify-between ${
+                      sortKey === opt.key
+                        ? "text-indigo-600 dark:text-indigo-400 font-medium"
+                        : "text-neutral-700 dark:text-neutral-300"
+                    }`}
+                  >
+                    {opt.label}
+                    {sortKey === opt.key && (
+                      <span className="text-xs">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             onClick={loadServers}
             className="flex items-center gap-1.5 text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors"
@@ -205,7 +278,7 @@ export default function ServersPage() {
 
       {/* Server Cards */}
       <div className="space-y-2">
-        {servers.map((server) => (
+        {sortedServers.map((server) => (
           <div key={server.project_name}>
             <div
               className={`bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 border-l-4 ${getBorderColor(server)} overflow-hidden`}

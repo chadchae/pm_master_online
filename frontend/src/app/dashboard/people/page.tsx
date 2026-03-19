@@ -568,7 +568,6 @@ export default function PeoplePage() {
       case "affiliation": va = (a.affiliation || "").toLowerCase(); vb = (b.affiliation || "").toLowerCase(); break;
       case "email": va = (a.email || "").toLowerCase(); vb = (b.email || "").toLowerCase(); break;
       case "relationship": va = a.relationship || ""; vb = b.relationship || ""; break;
-      case "projects": va = String(a.projects?.length || 0); vb = String(b.projects?.length || 0); break;
     }
     const cmp = va.localeCompare(vb);
     return sortDir === "asc" ? cmp : -cmp;
@@ -779,7 +778,7 @@ export default function PeoplePage() {
       ) : viewMode === "card" ? (
         /* Card grid */
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {people.map((person) => (
+          {sortedPeople.map((person) => (
             <PersonCard
               key={person.id}
               person={person}
@@ -847,7 +846,6 @@ export default function PeoplePage() {
                     { key: "affiliation", label: "Affiliation" },
                     { key: "email", label: "Email" },
                     { key: "relationship", label: "Relationship" },
-                    { key: "projects", label: "Projects" },
                   ].map((col) => (
                     <th
                       key={col.key}
@@ -960,11 +958,6 @@ export default function PeoplePage() {
                             {person.relationship}
                           </span>
                         ) : null}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">
-                        {person.projects.length > 0
-                          ? person.projects.join(", ")
-                          : "-"}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">

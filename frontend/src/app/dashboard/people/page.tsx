@@ -488,17 +488,17 @@ function PersonCard({
           <Edit3 className="w-4 h-4" />
         </button>
       </div>
-      {/* Alias + Role */}
+      {/* Alias + Role — aligned with name text */}
       {(person.name_ko || person.role) && (
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-2">
+        <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-2 pl-4">
           {person.name_ko && <span>{person.name_ko}</span>}
           {person.name_ko && person.role && <span className="text-neutral-300 dark:text-neutral-600 mx-1">·</span>}
           {person.role && <span>{person.role}</span>}
         </p>
       )}
 
-      {/* Details */}
-      <div>
+      {/* Details — text aligned with name */}
+      <div className="pl-4">
 
         {/* Affiliation */}
         {person.affiliation && (

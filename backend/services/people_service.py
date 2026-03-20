@@ -72,6 +72,7 @@ def create_person(data: dict[str, Any]) -> dict[str, Any]:
         "email": data.get("email", ""),
         "expertise": data.get("expertise", []),
         "relationship": data.get("relationship", ""),
+        "hierarchy": data.get("hierarchy", ""),
         "notes": data.get("notes", ""),
         "projects": data.get("projects", []),
         "connections": data.get("connections", []),
@@ -90,7 +91,7 @@ def update_person(person_id: str, data: dict[str, Any]) -> dict[str, Any] | None
         if person["id"] == person_id:
             # Update only provided fields, preserve id and created_at
             for key in ("name", "name_ko", "role", "affiliation", "email",
-                        "expertise", "relationship", "notes", "projects", "connections"):
+                        "expertise", "relationship", "hierarchy", "notes", "projects", "connections"):
                 if key in data:
                     person[key] = data[key]
             person["updated_at"] = str(date.today())

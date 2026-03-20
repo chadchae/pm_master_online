@@ -34,6 +34,7 @@ interface Person {
   email: string;
   expertise: string[];
   relationship: string;
+  hierarchy: string;
   notes: string;
   projects: string[];
   connections: string[];  // IDs of connected people
@@ -49,6 +50,7 @@ interface PersonFormData {
   email: string;
   expertise: string;
   relationship: string;
+  hierarchy: string;
   notes: string;
   connections: string[];  // IDs
 }
@@ -59,6 +61,7 @@ const RELATIONSHIP_COLORS: Record<string, string> = {
   advisor: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
   student: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   colleague: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  friend: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
   external: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
 };
 
@@ -68,8 +71,16 @@ const RELATIONSHIP_OPTIONS = [
   "advisor",
   "student",
   "colleague",
+  "friend",
   "external",
 ];
+
+const HIERARCHY_OPTIONS = ["선배", "동기", "후배"];
+const HIERARCHY_COLORS: Record<string, string> = {
+  "선배": "text-purple-600 dark:text-purple-400",
+  "동기": "text-blue-600 dark:text-blue-400",
+  "후배": "text-green-600 dark:text-green-400",
+};
 
 const EMPTY_FORM: PersonFormData = {
   name: "",
@@ -79,6 +90,7 @@ const EMPTY_FORM: PersonFormData = {
   email: "",
   expertise: "",
   relationship: "colleague",
+  hierarchy: "",
   notes: "",
   connections: [],
 };
@@ -187,6 +199,22 @@ function PersonForm({
               <option key={opt} value={opt}>
                 {opt}
               </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
+            위계
+          </label>
+          <select
+            name="hierarchy"
+            value={form.hierarchy}
+            onChange={handleChange}
+            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">--</option>
+            {HIERARCHY_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
         </div>
@@ -311,6 +339,7 @@ function PersonCard({
           email: person.email,
           expertise: person.expertise.join(", "),
           relationship: person.relationship,
+          hierarchy: person.hierarchy || "",
           notes: person.notes,
           connections: person.connections || [],
         }}
@@ -391,14 +420,19 @@ function PersonCard({
         </div>
       )}
 
-      {/* Relationship badge */}
-      {person.relationship && (
-        <span
-          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${relColor} mb-3`}
-        >
-          {person.relationship}
-        </span>
-      )}
+      {/* Relationship + Hierarchy badges */}
+      <div className="flex items-center gap-1.5 mb-3">
+        {person.relationship && (
+          <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${relColor}`}>
+            {person.relationship}
+          </span>
+        )}
+        {person.hierarchy && (
+          <span className={`text-xs font-medium ${HIERARCHY_COLORS[person.hierarchy] || "text-neutral-500"}`}>
+            {person.hierarchy}
+          </span>
+        )}
+      </div>
 
       {/* Notes */}
       {person.notes && (
@@ -486,6 +520,7 @@ export default function PeoplePage() {
   const [editAffiliation, setEditAffiliation] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editRelationship, setEditRelationship] = useState("");
+  const [editHierarchy, setEditHierarchy] = useState("");
   // ConfirmDialog state for delete
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
@@ -496,6 +531,7 @@ export default function PeoplePage() {
     setEditAffiliation(person.affiliation || "");
     setEditEmail(person.email || "");
     setEditRelationship(person.relationship || "colleague");
+    setEditHierarchy(person.hierarchy || "");
     setEditingId(null);
   };
 
@@ -517,6 +553,7 @@ export default function PeoplePage() {
         email: editEmail,
         expertise: person.expertise.join(", "),
         relationship: editRelationship,
+        hierarchy: editHierarchy,
         notes: person.notes,
         connections: person.connections || [],
       };
@@ -567,7 +604,8 @@ export default function PeoplePage() {
       case "role": va = (a.role || "").toLowerCase(); vb = (b.role || "").toLowerCase(); break;
       case "affiliation": va = (a.affiliation || "").toLowerCase(); vb = (b.affiliation || "").toLowerCase(); break;
       case "email": va = (a.email || "").toLowerCase(); vb = (b.email || "").toLowerCase(); break;
-      case "relationship": va = a.relationship || ""; vb = b.relationship || ""; break;
+      case "relationship": va = a.relationship || "zzz"; vb = b.relationship || "zzz"; break;
+      case "hierarchy": va = a.hierarchy === "선배" ? "a" : a.hierarchy === "동기" ? "b" : a.hierarchy === "후배" ? "c" : "zzz"; vb = b.hierarchy === "선배" ? "a" : b.hierarchy === "동기" ? "b" : b.hierarchy === "후배" ? "c" : "zzz"; break;
     }
     const cmp = va.localeCompare(vb);
     return sortDir === "asc" ? cmp : -cmp;
@@ -846,6 +884,7 @@ export default function PeoplePage() {
                     { key: "affiliation", label: "Affiliation" },
                     { key: "email", label: "Email" },
                     { key: "relationship", label: "Relationship" },
+                    { key: "hierarchy", label: "위계" },
                   ].map((col) => (
                     <th
                       key={col.key}
@@ -958,6 +997,24 @@ export default function PeoplePage() {
                             {person.relationship}
                           </span>
                         ) : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <select
+                            value={editHierarchy}
+                            onChange={(e) => setEditHierarchy(e.target.value)}
+                            className={inputClass}
+                          >
+                            <option value="">--</option>
+                            {HIERARCHY_OPTIONS.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : person.hierarchy ? (
+                          <span className={`text-xs font-medium ${HIERARCHY_COLORS[person.hierarchy] || ""}`}>
+                            {person.hierarchy}
+                          </span>
+                        ) : <span className="text-neutral-300">-</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">

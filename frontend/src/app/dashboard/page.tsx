@@ -336,6 +336,9 @@ export default function DashboardPage() {
       case "importance": va = a.metadata?.["중요도"] || "0"; vb = b.metadata?.["중요도"] || "0"; break;
       case "severity": va = a.metadata?.["위급도"] || "zzz"; vb = b.metadata?.["위급도"] || "zzz"; break;
       case "urgency": va = a.metadata?.["긴급도"] || "zzz"; vb = b.metadata?.["긴급도"] || "zzz"; break;
+      case "collab": va = a.metadata?.["협업"] === "collaboration" ? "a" : a.metadata?.["협업"] === "personal" ? "b" : "zzz"; vb = b.metadata?.["협업"] === "collaboration" ? "a" : b.metadata?.["협업"] === "personal" ? "b" : "zzz"; break;
+      case "owner": va = a.metadata?.["오너"] || "zzz"; vb = b.metadata?.["오너"] || "zzz"; break;
+      case "role": va = a.metadata?.["주도"] === "lead" ? "a" : a.metadata?.["주도"] === "member" ? "b" : "zzz"; vb = b.metadata?.["주도"] === "lead" ? "a" : b.metadata?.["주도"] === "member" ? "b" : "zzz"; break;
       case "created": va = a.metadata?.작성일 || "9999-99-99"; vb = b.metadata?.작성일 || "9999-99-99"; break;
       case "modified": va = a.last_modified || "0000-00-00"; vb = b.last_modified || "0000-00-00"; break;
       case "targetEnd": va = a.metadata?.["목표종료일"] || "9999-99-99"; vb = b.metadata?.["목표종료일"] || "9999-99-99"; break;
@@ -789,19 +792,19 @@ export default function DashboardPage() {
                   </th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("importance")}>
                     <span className="inline-flex items-center gap-1">
-                      Importance
+                      중요도
                       {sortKey === "importance" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("severity")}>
                     <span className="inline-flex items-center gap-1">
-                      Severity
+                      엄정함
                       {sortKey === "severity" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("urgency")}>
                     <span className="inline-flex items-center gap-1">
-                      Urgency
+                      긴급도
                       {sortKey === "urgency" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
@@ -809,6 +812,24 @@ export default function DashboardPage() {
                     <span className="inline-flex items-center gap-1">
                       {t("dashboard.progress")}
                       {sortKey === "progress" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort("collab")}>
+                    <span className="inline-flex items-center gap-1">
+                      Collab
+                      {sortKey === "collab" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort("owner")}>
+                    <span className="inline-flex items-center gap-1">
+                      Owner
+                      {sortKey === "owner" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort("role")}>
+                    <span className="inline-flex items-center gap-1">
+                      Role
+                      {sortKey === "role" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none min-w-[90px]" onClick={() => toggleSort("created")}>
@@ -881,10 +902,19 @@ export default function DashboardPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs whitespace-nowrap">
+                      <td className="px-3 py-3 text-xs whitespace-nowrap">
+                        {project.metadata?.["협업"] === "collaboration" ? <span className="text-blue-500">Collab</span> : project.metadata?.["협업"] === "personal" ? <span className="text-neutral-400">Personal</span> : <span className="text-neutral-300">-</span>}
+                      </td>
+                      <td className="px-3 py-3 text-xs whitespace-nowrap text-neutral-600 dark:text-neutral-400">
+                        {project.metadata?.["오너"] || "-"}
+                      </td>
+                      <td className="px-3 py-3 text-xs whitespace-nowrap">
+                        {project.metadata?.["주도"] === "lead" ? <span className="text-indigo-500">Lead</span> : project.metadata?.["주도"] === "member" ? <span className="text-neutral-500">Member</span> : <span className="text-neutral-300">-</span>}
+                      </td>
+                      <td className="px-3 py-3 text-neutral-500 dark:text-neutral-400 text-xs whitespace-nowrap">
                         {project.metadata?.작성일 || "-"}
                       </td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                      <td className="px-3 py-3 text-xs whitespace-nowrap">
                         {project.metadata?.["목표종료일"] ? <span className={getTargetDateColor(project.metadata["목표종료일"], project.metadata)}>{project.metadata["목표종료일"]}</span> : <span className="text-neutral-300">-</span>}
                       </td>
                       <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs whitespace-nowrap">

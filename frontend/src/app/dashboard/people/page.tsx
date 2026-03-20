@@ -66,6 +66,7 @@ const RELATIONSHIP_COLORS: Record<string, string> = {
   self: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
   "co-author": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
   advisor: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  advisee: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
   student: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   colleague: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   friend: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
@@ -76,6 +77,7 @@ const RELATIONSHIP_OPTIONS = [
   "self",
   "co-author",
   "advisor",
+  "advisee",
   "student",
   "colleague",
   "friend",
@@ -470,19 +472,13 @@ function PersonCard({
       onDrop={dragHandlers?.onDrop}
       onDragLeave={dragHandlers?.onDragLeave}
     >
-      {/* Header — name + alias + role on same line */}
-      <div className="flex items-start justify-between mb-2">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-1">
         <div className="flex items-center gap-1 min-w-0">
           <GripVertical className="w-3 h-3 text-neutral-300 dark:text-neutral-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
           <h3 className="text-lg font-semibold text-neutral-900 dark:text-white truncate">
             {person.name}
           </h3>
-          {person.name_ko && (
-            <span className="text-sm text-neutral-500 dark:text-neutral-400 ml-1">{person.name_ko}</span>
-          )}
-          {person.role && (
-            <span className="text-sm text-neutral-400 dark:text-neutral-500 ml-1">· {person.role}</span>
-          )}
         </div>
         <button
           onClick={onEdit}
@@ -492,6 +488,14 @@ function PersonCard({
           <Edit3 className="w-4 h-4" />
         </button>
       </div>
+      {/* Alias + Role */}
+      {(person.name_ko || person.role) && (
+        <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-2">
+          {person.name_ko && <span>{person.name_ko}</span>}
+          {person.name_ko && person.role && <span className="text-neutral-300 dark:text-neutral-600 mx-1">·</span>}
+          {person.role && <span>{person.role}</span>}
+        </p>
+      )}
 
       {/* Details */}
       <div>

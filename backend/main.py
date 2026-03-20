@@ -1279,8 +1279,12 @@ class PersonCreateRequest(BaseModel):
     email: str = ""
     expertise: list[str] = []
     relationship: str = ""
+    hierarchy: str = ""
+    importance: int = 0
+    closeness: int = 0
     notes: str = ""
     projects: list[str] = []
+    connections: list[str] = []
 
 
 class PersonUpdateRequest(BaseModel):
@@ -1291,8 +1295,12 @@ class PersonUpdateRequest(BaseModel):
     email: str | None = None
     expertise: list[str] | None = None
     relationship: str | None = None
+    hierarchy: str | None = None
+    importance: int | None = None
+    closeness: int | None = None
     notes: str | None = None
     projects: list[str] | None = None
+    connections: list[str] | None = None
 
 
 @app.get("/api/people/search")

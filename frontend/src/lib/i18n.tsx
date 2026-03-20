@@ -23,7 +23,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "sidebar.guidelines": "가이드라인",
     "sidebar.timeline": "타임라인",
     "sidebar.servers": "서버",
-    "sidebar.people": "관계자",
+    "sidebar.people": "사람",
     "sidebar.trash": "휴지통",
     "sidebar.execute": "실행",
     "sidebar.status": "현황",

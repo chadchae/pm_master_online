@@ -96,6 +96,17 @@ export default function DashboardPage() {
   } | null>(null);
   const [cardOrder, setCardOrder] = useState<Record<string, string[]>>({});
   const [dragOverCard, setDragOverCard] = useState<string | null>(null);
+  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("pm_collapsedStages");
+      if (saved) { try { return new Set(JSON.parse(saved)); } catch {} }
+    }
+    return new Set();
+  });
+  useEffect(() => { localStorage.setItem("pm_collapsedStages", JSON.stringify([...collapsedStages])); }, [collapsedStages]);
+  const toggleStage = (folder: string) => {
+    setCollapsedStages((prev) => { const next = new Set(prev); next.has(folder) ? next.delete(folder) : next.add(folder); return next; });
+  };
   const [typeFilters, setTypeFilters] = useState<Set<string>>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("pm_typeFilters");
@@ -108,6 +119,10 @@ export default function DashboardPage() {
   const [sortKey, setSortKey] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [showNewProject, setShowNewProject] = useState(false);
+  const [editingCard, setEditingCard] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editType, setEditType] = useState("");
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [promptDialog, setPromptDialog] = useState<{ title: string; defaultValue?: string; onConfirm: (val: string) => void } | null>(null);
   const [isDark, setIsDark] = useState(false);
@@ -528,14 +543,38 @@ export default function DashboardPage() {
 
         {/* Kanban View */}
         {viewMode === "kanban" && (
-          <div className="grid grid-cols-5 gap-3 min-h-[400px]">
+          <div className="flex gap-3 min-h-[400px]">
             {KANBAN_STAGES.map((stage) => {
               const stageProjects = projectsByStage[stage.folder] || [];
               const isDragOver = dragOverStage === stage.folder;
+              const isCollapsed = collapsedStages.has(stage.folder);
+
+              if (isCollapsed) {
+                return (
+                  <div
+                    key={stage.folder}
+                    className={`w-10 flex-shrink-0 rounded-xl border cursor-pointer transition-all ${theme.columnBorder} ${theme.column} hover:bg-neutral-200/50 dark:hover:bg-neutral-700/30`}
+                    onClick={() => toggleStage(stage.folder)}
+                    onDragOver={(e) => handleDragOver(e, stage.folder)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, stage.folder)}
+                    title={`${stage.label} (${stageProjects.length})`}
+                  >
+                    <div className="flex flex-col items-center pt-3 gap-1">
+                      <span className="text-[10px] text-neutral-400">&#9654;</span>
+                      <span className={`text-[10px] font-semibold uppercase tracking-wider ${stage.textColor} [writing-mode:vertical-lr]`}>
+                        {stage.label}
+                      </span>
+                      <span className="text-[10px] text-neutral-400 mt-1">{stageProjects.length}</span>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={stage.folder}
-                  className={`flex flex-col rounded-xl border transition-colors ${
+                  className={`flex-1 min-w-0 flex flex-col rounded-xl border transition-colors ${
                     isDragOver
                       ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30"
                       : `${theme.columnBorder} ${theme.column}`
@@ -544,14 +583,18 @@ export default function DashboardPage() {
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, stage.folder)}
                 >
-                  <div className={`px-3 py-2.5 border-b ${theme.cardBorder}`}>
+                  <div
+                    className={`px-3 py-2.5 border-b ${theme.cardBorder} cursor-pointer select-none`}
+                    onClick={() => toggleStage(stage.folder)}
+                  >
                     <div className="flex items-center justify-between">
-                      <div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-neutral-400 rotate-90">&#9654;</span>
                         <span className={`text-xs font-semibold uppercase tracking-wider ${stage.textColor}`}>
                           {stage.label}
                         </span>
                         {stage.sublabel && (
-                          <span className="text-[10px] text-neutral-400 ml-1.5">
+                          <span className="text-[10px] text-neutral-400 ml-1">
                             / {stage.sublabel}
                           </span>
                         )}
@@ -583,7 +626,7 @@ export default function DashboardPage() {
                           }
                         }}
                         onDragLeave={() => setDragOverCard(null)}
-                        onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`)}
+                        onClick={() => { if (editingCard !== project.name) router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`); }}
                         className={`group p-2.5 rounded-lg border transition-all hover:shadow-sm cursor-pointer ${
                           draggedProject?.name === project.name
                             ? `opacity-50 ${theme.cardBorder}`
@@ -592,10 +635,64 @@ export default function DashboardPage() {
                             : `${theme.cardBorder} ${theme.card} ${theme.cardHover}`
                         }`}
                       >
-                        <div className="flex items-start gap-1.5">
-                          <GripVertical className="w-3.5 h-3.5 text-neutral-300 dark:text-neutral-600 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
+                        {editingCard === project.name ? (
+                          <div className="p-2.5 space-y-2" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              value={editLabel}
+                              onChange={(e) => setEditLabel(e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                              placeholder="Label"
+                            />
+                            <textarea
+                              value={editDesc}
+                              onChange={(e) => setEditDesc(e.target.value)}
+                              rows={2}
+                              className="w-full px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white resize-none"
+                              placeholder="Description"
+                            />
+                            <select
+                              value={editType}
+                              onChange={(e) => setEditType(e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                            >
+                              <option value="">Not set</option>
+                              {[...new Set(projects.map(p => p.metadata?.["유형"] || "").filter(Boolean))].sort().map(t => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await apiFetch(`/api/projects/${encodeURIComponent(project.name)}/metadata`, {
+                                      method: "PUT",
+                                      body: JSON.stringify({ metadata: { label: editLabel, description: editDesc, "유형": editType } }),
+                                    });
+                                    setEditingCard(null);
+                                    loadData();
+                                    toast.success("Saved");
+                                  } catch {
+                                    toast.error("Failed to save");
+                                  }
+                                }}
+                                className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingCard(null)}
+                                className="px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                        <>
+                        <div className="flex items-start gap-1">
+                          <GripVertical className="w-3 h-3 text-neutral-300 dark:text-neutral-600 mt-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-neutral-900 dark:text-white truncate">
+                            <p className="text-base font-semibold text-neutral-900 dark:text-white truncate">
                               {project.metadata?.label || project.name}
                             </p>
                             {project.metadata?.label && (
@@ -606,7 +703,12 @@ export default function DashboardPage() {
                                 {project.metadata.description}
                               </p>
                             )}
-                            <MetaTags metadata={project.metadata} compact />
+                            <MetaTags metadata={project.metadata} compact editable onUpdate={(field, value) => {
+                              apiFetch(`/api/projects/${encodeURIComponent(project.name)}/metadata`, {
+                                method: "PUT",
+                                body: JSON.stringify({ metadata: { [field]: value } }),
+                              }).then(() => loadData()).catch(() => toast.error("Failed"));
+                            }} />
                             <ProgressBar metadata={project.metadata} compact />
                             <div className="flex items-center gap-1 mt-1 flex-wrap">
                               {getTypeBadge(project.metadata?.유형)}
@@ -649,7 +751,13 @@ export default function DashboardPage() {
                         {/* Action buttons */}
                         <div className={`flex items-center gap-1 mt-2 pt-1.5 border-t ${theme.cardBorder} opacity-0 group-hover:opacity-100 transition-opacity`}>
                           <button
-                            onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCard(project.name);
+                              setEditLabel(project.metadata?.label || project.name);
+                              setEditDesc(project.metadata?.description || "");
+                              setEditType(project.metadata?.["유형"] || "");
+                            }}
                             className="p-1 text-neutral-400 hover:text-indigo-500 rounded" title={t("action.edit")}
                           >
                             <Pencil className="w-3 h-3" />
@@ -678,6 +786,19 @@ export default function DashboardPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              apiFetch("/api/projects/move", {
+                                method: "POST",
+                                body: JSON.stringify({ project_name: project.name, from_stage: project.stage, to_stage: "1_idea_stage", instruction: "" }),
+                              }).then(() => { loadData(); toast.success("Moved to Ideas"); }).catch(() => toast.error("Failed"));
+                            }}
+                            className="p-1 text-neutral-400 hover:text-amber-500 rounded"
+                            title="Move to Ideas"
+                          >
+                            <Lightbulb className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setConfirmDialog({
                                 message: `Delete "${project.metadata?.label || project.name}"?`,
                                 onConfirm: () => {
@@ -694,6 +815,8 @@ export default function DashboardPage() {
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
+                        </>
+                        )}
                       </div>
                     ))}
                     {stageProjects.length === 0 && (

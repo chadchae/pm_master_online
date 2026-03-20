@@ -59,6 +59,10 @@ export default function IdeasPage() {
     }
     return [];
   });
+  const [editingCard, setEditingCard] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editType, setEditType] = useState("");
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [promptDialog, setPromptDialog] = useState<{ title: string; defaultValue?: string; onConfirm: (val: string) => void } | null>(null);
   const [typeFilters, setTypeFilters] = useState<Set<string>>(() => {
@@ -421,6 +425,61 @@ export default function IdeasPage() {
                   draggedIdea === idea.name ? "opacity-50 border-neutral-300 dark:border-neutral-800" : dragOverIdea === idea.name ? "border-amber-400 dark:border-amber-500" : "border-neutral-300 dark:border-neutral-800"
                 }`}
               >
+                {/* Card Content */}
+                {editingCard === idea.name ? (
+                  <div className="p-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      value={editLabel}
+                      onChange={(e) => setEditLabel(e.target.value)}
+                      className="w-full px-2 py-1 text-sm border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                      placeholder="Label"
+                    />
+                    <textarea
+                      value={editDesc}
+                      onChange={(e) => setEditDesc(e.target.value)}
+                      rows={2}
+                      className="w-full px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white resize-none"
+                      placeholder="Description"
+                    />
+                    <select
+                      value={editType}
+                      onChange={(e) => setEditType(e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                    >
+                      <option value="">Not set</option>
+                      {[...new Set(ideas.map(p => p.metadata?.["유형"] || "").filter(Boolean))].sort().map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={async () => {
+                          try {
+                            await apiFetch(`/api/projects/${encodeURIComponent(idea.name)}/metadata`, {
+                              method: "PUT",
+                              body: JSON.stringify({ metadata: { label: editLabel, description: editDesc, "유형": editType } }),
+                            });
+                            setEditingCard(null);
+                            loadIdeas();
+                            toast.success("Saved");
+                          } catch {
+                            toast.error("Failed to save");
+                          }
+                        }}
+                        className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingCard(null)}
+                        className="px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                <>
                 {/* Card Header */}
                 <div
                   className="p-4 cursor-pointer"
@@ -431,9 +490,9 @@ export default function IdeasPage() {
                   }
                 >
                   <div className="flex items-start gap-1.5">
-                    <GripVertical className="w-3.5 h-3.5 text-neutral-300 dark:text-neutral-600 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
+                    <GripVertical className="w-3 h-3 text-neutral-300 dark:text-neutral-600 mt-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
+                      <h3 className="text-base font-semibold text-neutral-900 dark:text-white">
                         {idea.metadata?.label || idea.name}
                       </h3>
                       {idea.metadata?.label && (
@@ -445,7 +504,12 @@ export default function IdeasPage() {
                         </p>
                       )}
                       <div className="mt-2">
-                        <MetaTags metadata={idea.metadata} />
+                        <MetaTags metadata={idea.metadata} editable onUpdate={(field, value) => {
+                          apiFetch(`/api/projects/${encodeURIComponent(idea.name)}/metadata`, {
+                            method: "PUT",
+                            body: JSON.stringify({ metadata: { [field]: value } }),
+                          }).then(() => loadIdeas()).catch(() => toast.error("Failed"));
+                        }} />
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mt-2">
                         {idea.metadata?.["유형"] && (() => {
@@ -489,6 +553,20 @@ export default function IdeasPage() {
                 {/* Card Actions */}
                 <div className="flex border-t border-neutral-200 dark:border-neutral-800">
                   <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingCard(idea.name);
+                      setEditLabel(idea.metadata?.label || idea.name);
+                      setEditDesc(idea.metadata?.description || "");
+                      setEditType(idea.metadata?.["유형"] || "");
+                    }}
+                    className="flex items-center justify-center px-3 py-2 text-xs text-neutral-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
+                    title="Edit"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="w-px bg-neutral-200 dark:bg-neutral-800" />
+                  <button
                     onClick={() => setMoveModal({
                       projectName: idea.name,
                       projectLabel: idea.metadata?.label,
@@ -530,6 +608,8 @@ export default function IdeasPage() {
                     )}
                   </button>
                 </div>
+                </>
+                )}
               </div>
             );
           })}

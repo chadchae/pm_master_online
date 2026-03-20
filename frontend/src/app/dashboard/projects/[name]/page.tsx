@@ -60,6 +60,7 @@ export default function ProjectDetailPage() {
   const name = decodeURIComponent(params.name as string);
 
   const [project, setProject] = useState<Project | null>(null);
+  const [allTypes, setAllTypes] = useState<string[]>([]);
   const [docs, setDocs] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
@@ -841,8 +842,10 @@ export default function ProjectDetailPage() {
         apiFetch<{ projects: Project[] }>("/api/projects"),
         apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs`).catch(() => ({ docs: [] })),
       ]);
-      const proj = (projectsRes.projects || []).find((p) => p.name === name);
+      const allProjects = projectsRes.projects || [];
+      const proj = allProjects.find((p) => p.name === name);
       setProject(proj || null);
+      setAllTypes([...new Set(allProjects.map((p) => p.metadata?.["유형"] || "").filter(Boolean))].sort());
       setDocs(docsRes.docs || []);
       loadSummary();
     } catch {
@@ -1164,22 +1167,24 @@ export default function ProjectDetailPage() {
                   </button>
                 </div>
               ) : (
-                <h1
-                  onClick={() => {
-                    setLabelDraft(project.metadata?.label || project.name);
-                    setEditingLabel(true);
-                  }}
-                  className="text-xl font-bold text-neutral-900 dark:text-white cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                  title={t("project.clickToRename")}
-                >
-                  {project.metadata?.label || project.name}
-                  <Edit3 className="inline-block w-3.5 h-3.5 ml-2 opacity-0 group-hover:opacity-40 transition-opacity" />
-                </h1>
+                <>
+                  <h1
+                    onClick={() => {
+                      setLabelDraft(project.metadata?.label || project.name);
+                      setEditingLabel(true);
+                    }}
+                    className="text-xl font-bold text-neutral-900 dark:text-white cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                    title={t("project.clickToRename")}
+                  >
+                    {project.metadata?.label || project.name}
+                    <Edit3 className="inline-block w-3.5 h-3.5 ml-2 opacity-0 group-hover:opacity-40 transition-opacity" />
+                  </h1>
+                  <span className="text-xs text-neutral-400 font-mono ml-2 self-center">{project.name}</span>
+                </>
               )}
             </div>
-            <p className="text-xs text-neutral-400 font-mono mt-0.5">{project.name}</p>
             {/* Description - editable */}
-            <div className="mt-1.5 group">
+            <div className="mt-1.5 group pl-9">
               {editingDesc ? (
                 <div className="flex items-start gap-2">
                   <textarea
@@ -1230,7 +1235,7 @@ export default function ProjectDetailPage() {
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-3 mt-2">
+            <div className="flex items-center gap-3 mt-2 pl-9">
               <span className={`text-xs px-2.5 py-1 rounded-full ${getStageBadgeClasses(project.stage)}`}>
                 {stage?.label || project.stage}
               </span>
@@ -3340,7 +3345,7 @@ export default function ProjectDetailPage() {
                   Type
                 </label>
                 <select
-                  value={["", "개인", "개발", "연구", "연구+개발", "사업", "커리큘럼디벨롭"].includes(metaDraft.유형 || "") ? (metaDraft.유형 || "") : metaDraft.유형}
+                  value={metaDraft.유형 || ""}
                   onChange={(e) => {
                     if (e.target.value === "__custom__") {
                       setPromptDialog({
@@ -3360,13 +3365,10 @@ export default function ProjectDetailPage() {
                   className="w-full px-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
                   <option value="">Not set</option>
-                  <option value="개인">개인</option>
-                  <option value="개발">개발</option>
-                  <option value="연구">연구</option>
-                  <option value="연구+개발">연구+개발</option>
-                  <option value="사업">사업</option>
-                  <option value="커리큘럼디벨롭">커리큘럼디벨롭</option>
-                  {metaDraft.유형 && !["", "개인", "개발", "연구", "연구+개발", "사업", "커리큘럼디벨롭"].includes(metaDraft.유형) && (
+                  {allTypes.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                  {metaDraft.유형 && !allTypes.includes(metaDraft.유형) && (
                     <option value={metaDraft.유형}>{metaDraft.유형}</option>
                   )}
                   <option value="__custom__">+ 직접 입력</option>

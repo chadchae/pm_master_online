@@ -217,6 +217,15 @@ def create_project(body: CreateProjectRequest):
     return result
 
 
+@app.post("/api/projects/{project_name}/clone")
+def clone_project(project_name: str):
+    """Clone a project with copy- prefix and [COPY] label."""
+    result = scanner_service.clone_project(project_name)
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
 class MoveProjectRequest(BaseModel):
     project_name: str
     from_stage: str

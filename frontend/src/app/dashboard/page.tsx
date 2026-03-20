@@ -4,7 +4,7 @@ import { useEffect, useState, DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, Project, ServerStatus } from "@/lib/api";
 import { STAGES, KANBAN_STAGES, getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
-import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock, Pencil, Trash2, Download, Plus, X } from "lucide-react";
+import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock, Pencil, Trash2, Download, Plus, X, Copy } from "lucide-react";
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
@@ -183,6 +183,38 @@ export default function DashboardPage() {
   });
   const ideaCount = projects.filter((p) => p.stage === "1_idea_stage").length;
 
+  // Target date color based on proximity to today
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getTargetDateColor = (targetDate: string | undefined, metadata?: any): string => {
+    if (!targetDate) return "";
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(targetDate);
+    target.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
+
+    // 100% complete → neutral gray regardless of date
+    const total = parseInt(String(metadata?.subtasks_total || "0"));
+    const done = parseInt(String(metadata?.subtasks_done || "0"));
+    if (total > 0 && done >= total) return "text-neutral-500 dark:text-neutral-400";
+
+    // Today → red
+    if (diffDays === 0) return "text-red-600 dark:text-red-400 font-semibold";
+    // Past due (overdue) → red to purple gradient
+    if (diffDays < 0) {
+      if (diffDays >= -3) return "text-red-500 dark:text-red-400";
+      if (diffDays >= -7) return "text-rose-600 dark:text-rose-400";
+      if (diffDays >= -14) return "text-fuchsia-600 dark:text-fuchsia-400";
+      return "text-purple-600 dark:text-purple-400";
+    }
+    // Future → blue gradient approaching red
+    if (diffDays <= 3) return "text-red-500 dark:text-red-400";
+    if (diffDays <= 7) return "text-orange-500 dark:text-orange-400";
+    if (diffDays <= 14) return "text-amber-500 dark:text-amber-400";
+    if (diffDays <= 30) return "text-blue-500 dark:text-blue-400";
+    return "text-blue-400 dark:text-blue-300";
+  };
+
   // Group projects by stage (kanban only), apply saved card order
   const projectsByStage = KANBAN_STAGES.reduce(
     (acc, stage) => {
@@ -300,12 +332,21 @@ export default function DashboardPage() {
     switch (sortKey) {
       case "name": va = (a.metadata?.label || a.name).toLowerCase(); vb = (b.metadata?.label || b.name).toLowerCase(); break;
       case "stage": va = a.stage; vb = b.stage; break;
-      case "type": va = a.metadata?.유형 || ""; vb = b.metadata?.유형 || ""; break;
+      case "type": va = a.metadata?.유형 || "zzz"; vb = b.metadata?.유형 || "zzz"; break;
       case "importance": va = a.metadata?.["중요도"] || "0"; vb = b.metadata?.["중요도"] || "0"; break;
-      case "severity": va = a.metadata?.["위급도"] || ""; vb = b.metadata?.["위급도"] || ""; break;
-      case "urgency": va = a.metadata?.["긴급도"] || ""; vb = b.metadata?.["긴급도"] || ""; break;
-      case "created": va = a.metadata?.작성일 || ""; vb = b.metadata?.작성일 || ""; break;
-      case "modified": va = a.last_modified || ""; vb = b.last_modified || ""; break;
+      case "severity": va = a.metadata?.["위급도"] || "zzz"; vb = b.metadata?.["위급도"] || "zzz"; break;
+      case "urgency": va = a.metadata?.["긴급도"] || "zzz"; vb = b.metadata?.["긴급도"] || "zzz"; break;
+      case "created": va = a.metadata?.작성일 || "9999-99-99"; vb = b.metadata?.작성일 || "9999-99-99"; break;
+      case "modified": va = a.last_modified || "0000-00-00"; vb = b.last_modified || "0000-00-00"; break;
+      case "targetEnd": va = a.metadata?.["목표종료일"] || "9999-99-99"; vb = b.metadata?.["목표종료일"] || "9999-99-99"; break;
+      case "progress": {
+        const ra = parseInt(a.metadata?.subtasks_total || "0") > 0 ? Math.round(parseInt(a.metadata?.subtasks_done || "0") / parseInt(a.metadata?.subtasks_total || "1") * 100) : -1;
+        const rb = parseInt(b.metadata?.subtasks_total || "0") > 0 ? Math.round(parseInt(b.metadata?.subtasks_done || "0") / parseInt(b.metadata?.subtasks_total || "1") * 100) : -1;
+        const pa = ra <= 0 ? 999 : ra;
+        const pb = rb <= 0 ? 999 : rb;
+        const cmp2 = pa - pb;
+        return sortDir === "asc" ? cmp2 : -cmp2;
+      }
     }
     const cmp = va.localeCompare(vb);
     return sortDir === "asc" ? cmp : -cmp;
@@ -576,7 +617,7 @@ export default function DashboardPage() {
                                     <span className="text-neutral-400">~</span>
                                   )}
                                   {project.metadata?.["목표종료일"] && (
-                                    <span className="text-amber-600 dark:text-amber-400">{project.metadata["목표종료일"]}</span>
+                                    <span className={getTargetDateColor(project.metadata["목표종료일"], project.metadata)}>{project.metadata["목표종료일"]}</span>
                                   )}
                                 </span>
                               )}
@@ -619,6 +660,17 @@ export default function DashboardPage() {
                             className="p-1 text-neutral-400 hover:text-blue-500 rounded" title={t("action.download")}
                           >
                             <Download className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              apiFetch(`/api/projects/${encodeURIComponent(project.name)}/clone`, { method: "POST" })
+                                .then(() => { loadData(); toast.success("Cloned"); })
+                                .catch(() => toast.error("Failed to clone"));
+                            }}
+                            className="p-1 text-neutral-400 hover:text-indigo-500 rounded" title="Clone"
+                          >
+                            <Copy className="w-3 h-3" />
                           </button>
                           <button
                             onClick={(e) => {
@@ -667,7 +719,7 @@ export default function DashboardPage() {
                 Owner: p.metadata?.["오너"] || "-",
                 People: p.metadata?.related_people || "-",
                 Port: p.metadata?.["포트"]?.toString() || "-",
-                "Target End": p.metadata?.["목표종료일"] || "-",
+                "Target": p.metadata?.["목표종료일"] || "-",
                 Created: p.metadata?.["작성일"] || "-",
                 Modified: p.last_modified?.split("T")[0] || "-",
               }));
@@ -685,7 +737,7 @@ export default function DashboardPage() {
                 Owner: p.metadata?.["오너"] || "-",
                 People: p.metadata?.related_people || "-",
                 Port: p.metadata?.["포트"]?.toString() || "-",
-                "Target End": p.metadata?.["목표종료일"] || "-",
+                "Target": p.metadata?.["목표종료일"] || "-",
                 Created: p.metadata?.["작성일"] || "-",
                 Modified: p.last_modified?.split("T")[0] || "-",
               }));
@@ -705,7 +757,7 @@ export default function DashboardPage() {
                 Owner: p.metadata?.["오너"] || "",
                 People: p.metadata?.related_people || "",
                 Port: p.metadata?.["포트"]?.toString() || "",
-                "Target End": p.metadata?.["목표종료일"] || "",
+                "Target": p.metadata?.["목표종료일"] || "",
                 "Actual End": p.metadata?.["실제종료일"] || "",
                 Created: p.metadata?.["작성일"] || "",
                 Modified: p.last_modified?.split("T")[0] || "",
@@ -717,7 +769,7 @@ export default function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50">
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("name")}>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none max-w-[200px]" onClick={() => toggleSort("name")}>
                     <span className="inline-flex items-center gap-1">
                       {t("dashboard.project")}
                       {sortKey === "name" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
@@ -729,7 +781,7 @@ export default function DashboardPage() {
                       {sortKey === "stage" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("type")}>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none min-w-[80px]" onClick={() => toggleSort("type")}>
                     <span className="inline-flex items-center gap-1">
                       {t("dashboard.type")}
                       {sortKey === "type" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
@@ -753,11 +805,22 @@ export default function DashboardPage() {
                       {sortKey === "urgency" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider w-32">{t("dashboard.progress")}</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("created")}>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider w-32 cursor-pointer select-none" onClick={() => toggleSort("progress")}>
+                    <span className="inline-flex items-center gap-1">
+                      {t("dashboard.progress")}
+                      {sortKey === "progress" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none min-w-[90px]" onClick={() => toggleSort("created")}>
                     <span className="inline-flex items-center gap-1">
                       Created
                       {sortKey === "created" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                    </span>
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("targetEnd")}>
+                    <span className="inline-flex items-center gap-1">
+                      Target
+                      {sortKey === "targetEnd" && <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                     </span>
                   </th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("modified")}>
@@ -793,30 +856,38 @@ export default function DashboardPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`text-xs px-2 py-0.5 rounded-full ${getStageBadgeClasses(project.stage)}`}>
                           {pStage?.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                      <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
                         {project.metadata?.유형 || "-"}
                       </td>
-                      <td className="px-4 py-3 text-xs">
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
                         {(() => { const v = parseInt(project.metadata?.["중요도"] || "0"); return v > 0 ? <span className="text-amber-500">{"★".repeat(v)}</span> : <span className="text-neutral-300">-</span>; })()}
                       </td>
-                      <td className="px-4 py-3 text-xs">
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
                         {project.metadata?.["위급도"] ? <span className={`${project.metadata["위급도"] === "critical" ? "text-red-500" : project.metadata["위급도"] === "high" ? "text-orange-500" : project.metadata["위급도"] === "medium" ? "text-yellow-500" : "text-green-500"}`}>{project.metadata["위급도"]}</span> : <span className="text-neutral-300">-</span>}
                       </td>
-                      <td className="px-4 py-3 text-xs">
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
                         {project.metadata?.["긴급도"] ? <span className={`${project.metadata["긴급도"] === "urgent" ? "text-red-500" : project.metadata["긴급도"] === "high" ? "text-orange-500" : project.metadata["긴급도"] === "medium" ? "text-yellow-500" : "text-green-500"}`}>{project.metadata["긴급도"]}</span> : <span className="text-neutral-300">-</span>}
                       </td>
-                      <td className="px-4 py-3">
-                        <ProgressBar metadata={project.metadata} compact />
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <ProgressBar metadata={project.metadata} compact />
+                          <span className="text-xs text-neutral-500 dark:text-neutral-400 w-8 text-right">
+                            {(() => { const t = parseInt(project.metadata?.subtasks_total || "0"); const d = parseInt(project.metadata?.subtasks_done || "0"); return t > 0 ? `${Math.round(d / t * 100)}%` : "-"; })()}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs">
+                      <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs whitespace-nowrap">
                         {project.metadata?.작성일 || "-"}
                       </td>
-                      <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs">
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                        {project.metadata?.["목표종료일"] ? <span className={getTargetDateColor(project.metadata["목표종료일"], project.metadata)}>{project.metadata["목표종료일"]}</span> : <span className="text-neutral-300">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400 text-xs whitespace-nowrap">
                         {project.last_modified ? project.last_modified.split("T")[0] : "-"}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -827,6 +898,17 @@ export default function DashboardPage() {
                             title="Edit"
                           >
                             <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              apiFetch(`/api/projects/${encodeURIComponent(project.name)}/clone`, { method: "POST" })
+                                .then(() => { loadData(); toast.success("Cloned"); })
+                                .catch(() => toast.error("Failed to clone"));
+                            }}
+                            className="p-1 text-neutral-400 hover:text-indigo-500 rounded"
+                            title="Clone"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => {

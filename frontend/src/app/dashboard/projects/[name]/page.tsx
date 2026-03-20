@@ -40,6 +40,7 @@ import {
   Circle,
   Download,
   Printer,
+  Copy,
 } from "lucide-react";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
@@ -1131,8 +1132,15 @@ export default function ProjectDetailPage() {
       <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            {/* Display Name - inline editable */}
-            <div className="group">
+            {/* Back + Display Name */}
+            <div className="group flex items-center gap-2">
+              <button
+                onClick={() => router.back()}
+                className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors flex-shrink-0"
+                title="Back"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
               {editingLabel ? (
                 <div className="flex items-center gap-2">
                   <input
@@ -1253,6 +1261,17 @@ export default function ProjectDetailPage() {
               title={t("action.download")}
             >
               <Download className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                apiFetch(`/api/projects/${encodeURIComponent(name)}/clone`, { method: "POST" })
+                  .then(() => { toast.success("Cloned"); router.push("/dashboard"); })
+                  .catch(() => toast.error("Failed to clone"));
+              }}
+              className="p-1.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-neutral-400 hover:text-indigo-500 transition-colors"
+              title="Clone"
+            >
+              <Copy className="w-4 h-4" />
             </button>
             <button
               onClick={() => {

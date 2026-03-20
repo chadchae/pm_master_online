@@ -19,6 +19,7 @@ import {
   List,
   Pencil,
   GripVertical,
+  Copy,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { MetaTags } from "@/components/MetaTags";
@@ -220,10 +221,29 @@ export default function IdeasPage() {
       case "urgency": va = a.metadata?.["긴급도"] || ""; vb = b.metadata?.["긴급도"] || ""; break;
       case "created": va = a.metadata?.["작성일"] || ""; vb = b.metadata?.["작성일"] || ""; break;
       case "modified": va = a.last_modified || ""; vb = b.last_modified || ""; break;
+      case "targetEnd": va = a.metadata?.["목표종료일"] || "9999-99-99"; vb = b.metadata?.["목표종료일"] || "9999-99-99"; break;
     }
     const cmp = va.localeCompare(vb);
     return sortDir === "asc" ? cmp : -cmp;
   });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const getTargetDateColor = (targetDate: string | undefined, metadata?: any): string => {
+    if (!targetDate) return "";
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const target = new Date(targetDate); target.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
+    const total = parseInt(String(metadata?.subtasks_total || "0"));
+    const done = parseInt(String(metadata?.subtasks_done || "0"));
+    if (total > 0 && done >= total) return "text-neutral-500 dark:text-neutral-400";
+    if (diffDays === 0) return "text-red-600 dark:text-red-400 font-semibold";
+    if (diffDays < 0) { if (diffDays >= -3) return "text-red-500 dark:text-red-400"; if (diffDays >= -7) return "text-rose-600 dark:text-rose-400"; if (diffDays >= -14) return "text-fuchsia-600 dark:text-fuchsia-400"; return "text-purple-600 dark:text-purple-400"; }
+    if (diffDays <= 3) return "text-red-500 dark:text-red-400";
+    if (diffDays <= 7) return "text-orange-500 dark:text-orange-400";
+    if (diffDays <= 14) return "text-amber-500 dark:text-amber-400";
+    if (diffDays <= 30) return "text-blue-500 dark:text-blue-400";
+    return "text-blue-400 dark:text-blue-300";
+  };
 
   const orderedFiltered = [...filtered].sort((a, b) => {
     const ai = ideaOrder.indexOf(a.name);
@@ -486,6 +506,18 @@ export default function IdeasPage() {
                   </button>
                   <div className="w-px bg-neutral-200 dark:bg-neutral-800" />
                   <button
+                    onClick={() => {
+                      apiFetch(`/api/projects/${encodeURIComponent(idea.name)}/clone`, { method: "POST" })
+                        .then(() => { loadIdeas(); toast.success("Cloned"); })
+                        .catch(() => toast.error("Failed to clone"));
+                    }}
+                    className="flex items-center justify-center px-3 py-2 text-xs text-neutral-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
+                    title="Clone"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="w-px bg-neutral-200 dark:bg-neutral-800" />
+                  <button
                     onClick={() => discardIdea(idea.name)}
                     disabled={discarding === idea.name}
                     className="flex items-center justify-center px-3 py-2 text-xs text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-40"
@@ -594,6 +626,12 @@ export default function IdeasPage() {
                     {sortKey === "created" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
                   </span>
                 </th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("targetEnd")}>
+                  <span className="inline-flex items-center gap-1">
+                    Target
+                    {sortKey === "targetEnd" && <span className="text-amber-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>}
+                  </span>
+                </th>
                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none" onClick={() => toggleSort("modified")}>
                   <span className="inline-flex items-center gap-1">
                     Modified
@@ -646,6 +684,9 @@ export default function IdeasPage() {
                     <span className="text-xs text-neutral-500 dark:text-neutral-400">
                       {idea.metadata?.["작성일"] || "-"}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {idea.metadata?.["목표종료일"] ? <span className={getTargetDateColor(idea.metadata["목표종료일"], idea.metadata)}>{idea.metadata["목표종료일"]}</span> : <span className="text-neutral-300">-</span>}
                   </td>
                   <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">
                     {idea.last_modified ? idea.last_modified.split("T")[0] : "-"}

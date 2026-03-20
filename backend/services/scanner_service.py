@@ -784,6 +784,49 @@ def create_project(
         return {"success": False, "message": f"Failed: {e}"}
 
 
+def clone_project(project_name: str) -> dict[str, Any]:
+    """Clone a project: copy folder with 'copy-' prefix, label with '[COPY]' prefix."""
+    import shutil
+
+    project_path = _find_project_path(project_name)
+    if project_path is None:
+        return {"success": False, "message": f"Project not found: {project_name}"}
+
+    stage_dir = project_path.parent
+    clone_name = f"copy-{project_name}"
+    clone_path = stage_dir / clone_name
+
+    # Avoid collision
+    counter = 1
+    while clone_path.exists():
+        clone_name = f"copy-{counter}-{project_name}"
+        clone_path = stage_dir / clone_name
+        counter += 1
+
+    try:
+        shutil.copytree(project_path, clone_path)
+
+        # Update label in cloned project's _아이디어노트.md
+        idea_note = clone_path / "docs" / "_아이디어노트.md"
+        if idea_note.exists():
+            content = idea_note.read_text(encoding="utf-8")
+            yaml_meta, body = _parse_yaml_frontmatter(content)
+            if yaml_meta:
+                old_label = yaml_meta.get("label", project_name)
+                yaml_meta["label"] = f"[COPY] {old_label}"
+                new_content = _build_yaml_frontmatter(yaml_meta) + body
+                idea_note.write_text(new_content, encoding="utf-8")
+
+        return {
+            "success": True,
+            "message": f"Cloned to {clone_name}",
+            "clone_name": clone_name,
+            "path": str(clone_path),
+        }
+    except OSError as e:
+        return {"success": False, "message": f"Failed to clone: {e}"}
+
+
 def move_project(project_name: str, from_stage: str, to_stage: str) -> dict[str, Any]:
     """Move a project folder from one stage to another.
 

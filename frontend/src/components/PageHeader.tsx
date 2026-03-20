@@ -25,6 +25,7 @@ function getPageTitle(
     "/dashboard/notes": t("breadcrumb.notes"),
     "/dashboard/learning": t("breadcrumb.learning"),
     "/dashboard/issues": t("breadcrumb.issues"),
+    "/dashboard/issue-docs": t("breadcrumb.issue-docs"),
     "/dashboard/guidelines": t("breadcrumb.guidelines"),
     "/dashboard/timeline": t("breadcrumb.timeline"),
     "/dashboard/servers": t("breadcrumb.servers"),

@@ -901,6 +901,27 @@ def get_project_summary(project_name: str):
     }
 
 
+# --- All-projects issues endpoint ---
+
+@app.get("/api/issues/all")
+def list_all_issues():
+    """List all issues across all projects with project info."""
+    projects = scanner_service.scan_projects()
+    all_issues: list[dict] = []
+    for proj in projects:
+        try:
+            data = issue_service.list_issues(proj["name"])
+            issues = data.get("issues", [])
+            for issue in issues:
+                issue["_project_name"] = proj["name"]
+                issue["_project_label"] = proj.get("metadata", {}).get("label", proj["name"])
+                issue["_project_type"] = proj.get("metadata", {}).get("\uc720\ud615", "")
+            all_issues.extend(issues)
+        except Exception:
+            pass
+    return {"issues": all_issues}
+
+
 # --- Issue endpoints ---
 
 class IssueCreateRequest(BaseModel):

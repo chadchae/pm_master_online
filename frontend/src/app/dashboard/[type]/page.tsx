@@ -26,7 +26,7 @@ import { useLocale } from "@/lib/i18n";
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
 const MarkdownPreview = lazy(() => import("@uiw/react-markdown-preview"));
 
-const VALID_TYPES = ["documents", "notes", "learning", "issues", "guidelines"];
+const VALID_TYPES = ["documents", "notes", "learning", "issues", "issue-docs", "guidelines"];
 
 export default function CommonFolderPage() {
   const params = useParams();

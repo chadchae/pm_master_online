@@ -11,6 +11,7 @@ FOLDER_TYPE_MAP = {
     "notes": "_notes",
     "learning": "_learning",
     "issues": "_issues_common",
+    "issue-docs": "_issues_common",
     "guideline": "_guideline",
     "guidelines": "_guideline",
     "documents": "_notes",  # documents tab maps to _notes for common view

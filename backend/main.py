@@ -10,7 +10,7 @@ import fcntl
 import termios
 
 from pathlib import Path
-from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
@@ -42,7 +42,7 @@ async def auth_middleware(request: Request, call_next):
     path = request.url.path
 
     # Allow public paths
-    if path in PUBLIC_PATHS:
+    if path in PUBLIC_PATHS or path.startswith("/api/people/photos/"):
         return await call_next(request)
 
     # Only protect /api/* routes
@@ -1273,9 +1273,10 @@ def download_project(project_name: str):
 
 class PersonCreateRequest(BaseModel):
     name: str
-    name_ko: str = ""
+    alias: str = ""
     role: str = ""
     affiliation: str = ""
+    industry: str = ""
     email: str = ""
     expertise: list[str] = []
     relationship: str = ""
@@ -1289,9 +1290,10 @@ class PersonCreateRequest(BaseModel):
 
 class PersonUpdateRequest(BaseModel):
     name: str | None = None
-    name_ko: str | None = None
+    alias: str | None = None
     role: str | None = None
     affiliation: str | None = None
+    industry: str | None = None
     email: str | None = None
     expertise: list[str] | None = None
     relationship: str | None = None
@@ -1350,3 +1352,78 @@ def delete_person(person_id: str):
     if person is None:
         raise HTTPException(status_code=404, detail="Person not found")
     return {"success": True, "deleted": person}
+
+
+@app.post("/api/people/sync-projects")
+def sync_projects_to_people():
+    """Sync project related_people to people's projects list."""
+    people_service.sync_projects_to_people()
+    return {"success": True}
+
+
+# --- People photo endpoints ---
+
+PEOPLE_PHOTOS_DIR = Path(os.environ.get("PROJECTS_ROOT", os.path.expanduser("~/Projects"))) / "_people" / "photos"
+
+
+@app.post("/api/people/{person_id}/photo")
+async def upload_person_photo(person_id: str, file: UploadFile = File(...)):
+    """Upload a photo for a person. Saves as {person_name}.{ext}."""
+    PEOPLE_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename else "png"
+    if ext not in ("png", "jpg", "jpeg", "gif", "webp"):
+        raise HTTPException(status_code=400, detail="Invalid image format")
+
+    # Get person name for filename
+    person = people_service.get_person(person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    # Slugify person name for safe filename
+    import re
+    slug = person["name"].strip()
+    slug = re.sub(r'[<>:"/\\|?*]', '', slug)  # remove unsafe chars
+    if not slug:
+        slug = person_id
+
+    # Remove old photos for this person (by id or name)
+    for old in PEOPLE_PHOTOS_DIR.glob(f"{person_id}.*"):
+        old.unlink()
+    for old in PEOPLE_PHOTOS_DIR.glob(f"{slug}.*"):
+        old.unlink()
+
+    photo_filename = f"{slug}.{ext}"
+    filepath = PEOPLE_PHOTOS_DIR / photo_filename
+    content = await file.read()
+    filepath.write_bytes(content)
+
+    # Update person's photo field
+    people_service.update_person(person_id, {"photo": photo_filename})
+
+    return {"success": True, "photo": photo_filename}
+
+
+@app.delete("/api/people/{person_id}/photo")
+def delete_person_photo(person_id: str):
+    """Delete a person's photo."""
+    person = people_service.get_person(person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+    photo = person.get("photo", "")
+    if photo:
+        filepath = PEOPLE_PHOTOS_DIR / photo
+        if filepath.exists():
+            filepath.unlink()
+        people_service.update_person(person_id, {"photo": ""})
+    return {"success": True}
+
+
+@app.get("/api/people/photos/{filename:path}")
+def serve_person_photo(filename: str):
+    """Serve a person's photo."""
+    from urllib.parse import unquote
+    decoded = unquote(filename)
+    filepath = PEOPLE_PHOTOS_DIR / decoded
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return FileResponse(filepath)

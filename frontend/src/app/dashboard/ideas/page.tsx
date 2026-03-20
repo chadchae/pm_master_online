@@ -368,9 +368,9 @@ export default function IdeasPage() {
               <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1 block">{t("ideas.type")}</label>
               <select value={newType} onChange={(e) => setNewType(e.target.value)} className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-amber-500">
                 <option value="">-</option>
-                <option value="개발">개발</option>
-                <option value="연구">연구</option>
-                <option value="연구+개발">연구+개발</option>
+                {[...new Set(ideas.map((p) => p.metadata?.["유형"] || "").filter(Boolean))].sort().map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
               </select>
             </div>
             <div className="flex-1" />

@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { X, Plus, Users, ChevronDown } from "lucide-react";
+import toast from "react-hot-toast";
 
 interface Person {
   id: string;
   name: string;
-  name_ko: string;
+  alias: string;
   role: string;
   relationship: string;
+  importance: number;
 }
 
 interface PeopleTagInputProps {
@@ -17,19 +19,23 @@ interface PeopleTagInputProps {
   onChange: (value: string[]) => void;
   label?: string;
   placeholder?: string;
+  projectLabel?: string;  // Current project label — auto-assigned to new people
 }
 
 const REL_COLORS: Record<string, string> = {
   self: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
   "co-author": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
   advisor: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  advisee: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
   student: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   colleague: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  friend: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
   external: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
 };
 
 export function PeopleTagInput({
   value,
+  projectLabel,
   onChange,
   label = "Related People",
   placeholder = "Add person...",
@@ -40,7 +46,22 @@ export function PeopleTagInput({
 
   useEffect(() => {
     apiFetch<{ people: Person[] }>("/api/people")
-      .then((res) => setPeople(res.people || []))
+      .then((res) => {
+        // Sort: self first, then by importance desc, then by name
+        const sorted = (res.people || []).sort((a, b) => {
+          if (a.relationship === "self" && b.relationship !== "self") return -1;
+          if (b.relationship === "self" && a.relationship !== "self") return 1;
+          if ((b.importance || 0) !== (a.importance || 0)) return (b.importance || 0) - (a.importance || 0);
+          return a.name.localeCompare(b.name);
+        });
+        setPeople(sorted);
+        // Clean up: remove names not in registered people
+        const registeredNames = new Set(sorted.flatMap((p) => [p.name, p.alias].filter(Boolean)));
+        const cleaned = value.filter((v) => registeredNames.has(v));
+        if (cleaned.length !== value.length) {
+          onChange(cleaned);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -48,22 +69,20 @@ export function PeopleTagInput({
     if (!name.trim() || value.includes(name.trim())) return;
     const trimmed = name.trim();
 
-    // If not in People list, auto-create
-    const exists = people.find((p) => p.name === trimmed);
+    // Auto-create if not registered
+    const exists = people.find((p) => p.name === trimmed || p.alias === trimmed);
     if (!exists) {
       try {
         await apiFetch("/api/people", {
           method: "POST",
-          body: JSON.stringify({
-            name: trimmed,
-            relationship: "colleague",
-          }),
+          body: JSON.stringify({ name: trimmed, relationship: "colleague", projects: projectLabel ? [projectLabel] : [] }),
         });
-        // Reload people list
         const res = await apiFetch<{ people: Person[] }>("/api/people");
         setPeople(res.people || []);
+        toast.success(`"${trimmed}" added to People`);
       } catch {
-        // Continue anyway — add to tags even if API fails
+        toast.error("Failed to create person");
+        return;
       }
     }
 
@@ -98,7 +117,7 @@ export function PeopleTagInput({
               key={name}
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${color}`}
             >
-              {person?.name_ko ? `${name} (${person.name_ko})` : name}
+              {person?.alias ? `${name} (${person.alias})` : name}
               <button
                 onClick={() => removePerson(name)}
                 className="hover:opacity-70 transition-opacity"
@@ -141,7 +160,7 @@ export function PeopleTagInput({
               </div>
 
               {/* People list */}
-              <div className="max-h-40 overflow-y-auto">
+              <div className="max-h-60 overflow-y-auto">
                 {available.length === 0 ? (
                   <p className="px-3 py-2 text-xs text-neutral-400">
                     {people.length === 0 ? "No people registered" : "All added"}
@@ -155,8 +174,8 @@ export function PeopleTagInput({
                     >
                       <span className="text-neutral-800 dark:text-neutral-200">
                         {p.name}
-                        {p.name_ko && (
-                          <span className="text-neutral-400 ml-1">({p.name_ko})</span>
+                        {p.alias && (
+                          <span className="text-neutral-400 ml-1">({p.alias})</span>
                         )}
                       </span>
                       <span className={`px-1.5 py-0.5 rounded text-xs ${REL_COLORS[p.relationship] || ""}`}>

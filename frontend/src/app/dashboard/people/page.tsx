@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Users,
   Building2,
@@ -20,6 +20,7 @@ import {
   Star,
   Smile,
   GripVertical,
+  Camera,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import toast from "react-hot-toast";
@@ -31,9 +32,10 @@ import { ListExportBar, generateMD, generateCSV, downloadFile, printList } from 
 interface Person {
   id: string;
   name: string;
-  name_ko: string;
+  alias: string;
   role: string;
   affiliation: string;
+  industry: string;
   email: string;
   expertise: string[];
   relationship: string;
@@ -43,15 +45,17 @@ interface Person {
   notes: string;
   projects: string[];
   connections: string[];
+  photo: string;
   created_at: string;
   updated_at: string;
 }
 
 interface PersonFormData {
   name: string;
-  name_ko: string;
+  alias: string;
   role: string;
   affiliation: string;
+  industry: string;
   email: string;
   expertise: string;
   relationship: string;
@@ -59,6 +63,7 @@ interface PersonFormData {
   importance: string;
   closeness: string;
   notes: string;
+  projects: string[];
   connections: string[];
 }
 
@@ -84,18 +89,20 @@ const RELATIONSHIP_OPTIONS = [
   "external",
 ];
 
-const HIERARCHY_OPTIONS = ["선배", "동기", "후배"];
+const HIERARCHY_OPTIONS = ["선배", "동기", "후배", "???"];
 const HIERARCHY_COLORS: Record<string, string> = {
   "선배": "text-purple-600 dark:text-purple-400",
   "동기": "text-blue-600 dark:text-blue-400",
   "후배": "text-green-600 dark:text-green-400",
+  "???": "text-neutral-400 dark:text-neutral-500",
 };
 
 const EMPTY_FORM: PersonFormData = {
   name: "",
-  name_ko: "",
+  alias: "",
   role: "",
   affiliation: "",
+  industry: "",
   email: "",
   expertise: "",
   relationship: "colleague",
@@ -103,6 +110,7 @@ const EMPTY_FORM: PersonFormData = {
   importance: "0",
   closeness: "0",
   notes: "",
+  projects: [],
   connections: [],
 };
 
@@ -145,17 +153,53 @@ function PersonForm({
   onCancel,
   saving,
   allPeople = [],
+  allProjectLabels = [],
   currentId,
+  currentPhoto,
 }: {
   initial: PersonFormData;
+  allProjectLabels?: string[];
   onSave: (data: PersonFormData) => void;
   onCancel: () => void;
   saving: boolean;
   allPeople?: Person[];
   currentId?: string;
+  currentPhoto?: string;
 }) {
   const { t } = useLocale();
   const [form, setForm] = useState<PersonFormData>(initial);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(
+    currentPhoto ? `/api/people/photos/${encodeURIComponent(currentPhoto)}` : null
+  );
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!currentId) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const token = typeof window !== "undefined" ? localStorage.getItem("pm_token") : null;
+      const res = await fetch(`/api/people/${currentId}/photo`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      setPhotoPreview(`/api/people/photos/${encodeURIComponent(data.photo)}?t=${Date.now()}`);
+      toast.success("Photo uploaded");
+    } catch {
+      toast.error("Failed to upload photo");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const handleChange = (
     e: React.ChangeEvent<
@@ -167,6 +211,58 @@ function PersonForm({
 
   return (
     <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl p-5 space-y-4">
+      {/* Photo upload area - only when editing */}
+      {currentId && (
+        <div className="mb-2">
+          <div
+            className={`relative w-20 h-20 rounded-lg border-2 border-dashed border-neutral-300 dark:border-neutral-600 flex items-center justify-center cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors overflow-hidden bg-neutral-100 dark:bg-neutral-800 ${uploadingPhoto ? "opacity-60 pointer-events-none" : ""}`}
+            onClick={() => photoInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const file = e.dataTransfer.files?.[0]; if (file) handlePhotoUpload(file); }}
+          >
+            {photoPreview ? (
+              <img src={photoPreview} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="text-center text-neutral-400 dark:text-neutral-500">
+                <Camera className="w-5 h-5 mx-auto mb-0.5 opacity-40" />
+                <p className="text-[8px]">사진</p>
+              </div>
+            )}
+            {uploadingPhoto && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                <Loader2 className="w-6 h-6 animate-spin text-white" />
+              </div>
+            )}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => { const file = e.target.files?.[0]; if (file) handlePhotoUpload(file); }}
+            />
+          </div>
+          {photoPreview && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const token = typeof window !== "undefined" ? localStorage.getItem("pm_token") : null;
+                  await fetch(`/api/people/${currentId}/photo`, {
+                    method: "DELETE",
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  });
+                  setPhotoPreview(null);
+                  toast.success("Photo removed");
+                } catch { toast.error("Failed"); }
+              }}
+              className="mt-1 text-xs text-red-400 hover:text-red-600 transition-colors"
+            >
+              사진 제거
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
@@ -185,8 +281,8 @@ function PersonForm({
             별칭
           </label>
           <input
-            name="name_ko"
-            value={form.name_ko}
+            name="alias"
+            value={form.alias}
             onChange={handleChange}
             placeholder="별칭 (선택)"
             className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -213,6 +309,18 @@ function PersonForm({
             value={form.affiliation}
             onChange={handleChange}
             placeholder="University or Organization"
+            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
+            산업
+          </label>
+          <input
+            name="industry"
+            value={form.industry}
+            onChange={handleChange}
+            placeholder="e.g. Education, IT, Healthcare"
             className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
@@ -331,6 +439,40 @@ function PersonForm({
           className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
         />
       </div>
+      {/* Projects */}
+      {allProjectLabels.length > 0 && (
+        <div>
+          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
+            연관 프로젝트
+          </label>
+          <div className="flex flex-wrap gap-1.5 p-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg min-h-[36px]">
+            {allProjectLabels.map((proj) => {
+              const isSelected = form.projects.includes(proj);
+              return (
+                <button
+                  key={proj}
+                  type="button"
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      projects: isSelected
+                        ? f.projects.filter((p) => p !== proj)
+                        : [...f.projects, proj],
+                    }))
+                  }
+                  className={`px-2 py-0.5 rounded-full text-xs transition-colors ${
+                    isSelected
+                      ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                      : "bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+                  }`}
+                >
+                  {proj}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {/* Connections */}
       {allPeople.length > 0 && (
         <div>
@@ -338,8 +480,13 @@ function PersonForm({
             {t("people.connectedPeople")}
           </label>
           <div className="flex flex-wrap gap-1.5 p-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg min-h-[36px]">
-            {allPeople
+            {[...allPeople]
               .filter((p) => p.id !== currentId)
+              .sort((a, b) => {
+                if (a.relationship === "self" && b.relationship !== "self") return -1;
+                if (b.relationship === "self" && a.relationship !== "self") return 1;
+                return (b.importance || 0) - (a.importance || 0);
+              })
               .map((p) => {
                 const isSelected = form.connections.includes(p.id);
                 return (
@@ -360,7 +507,7 @@ function PersonForm({
                         : "bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600"
                     }`}
                   >
-                    {p.name}{p.name_ko ? ` (${p.name_ko})` : ""}
+                    {p.name}{p.alias ? ` (${p.alias})` : ""}
                   </button>
                 );
               })}
@@ -396,6 +543,7 @@ function PersonForm({
 function PersonCard({
   person,
   allPeople,
+  allProjectLabels,
   onEdit,
   onDelete,
   editing,
@@ -408,6 +556,7 @@ function PersonCard({
 }: {
   person: Person;
   allPeople: Person[];
+  allProjectLabels: string[];
   onEdit: () => void;
   onDelete: () => void;
   editing: boolean;
@@ -432,9 +581,10 @@ function PersonCard({
       <PersonForm
         initial={{
           name: person.name,
-          name_ko: person.name_ko,
+          alias: person.alias,
           role: person.role,
           affiliation: person.affiliation,
+          industry: person.industry || "",
           email: person.email,
           expertise: person.expertise.join(", "),
           relationship: person.relationship,
@@ -442,13 +592,16 @@ function PersonCard({
           importance: String(person.importance || 0),
           closeness: String(person.closeness || 0),
           notes: person.notes,
+          projects: person.projects || [],
           connections: person.connections || [],
         }}
         onSave={onSaveEdit}
         onCancel={onCancelEdit}
         saving={saving}
         allPeople={allPeople}
+        allProjectLabels={allProjectLabels}
         currentId={person.id}
+        currentPhoto={person.photo}
       />
     );
   }
@@ -458,12 +611,14 @@ function PersonCard({
 
   return (
     <div
-      className={`bg-white dark:bg-neutral-900 border rounded-xl p-5 hover:border-neutral-300 dark:hover:border-neutral-600 transition-colors group ${
+      className={`bg-white dark:bg-neutral-900 rounded-xl p-5 hover:border-neutral-300 dark:hover:border-neutral-600 transition-colors group ${
         isDragged
-          ? "opacity-50 border-neutral-300 dark:border-neutral-800"
+          ? "opacity-50 border border-neutral-300 dark:border-neutral-800"
           : isDragOver
-          ? "border-indigo-400 dark:border-indigo-500"
-          : "border-neutral-200 dark:border-neutral-700"
+          ? "border border-indigo-400 dark:border-indigo-500"
+          : person.relationship === "self"
+          ? "border-2 border-amber-400 dark:border-amber-500"
+          : "border border-neutral-200 dark:border-neutral-700"
       }`}
       draggable
       onDragStart={dragHandlers?.onDragStart}
@@ -472,39 +627,61 @@ function PersonCard({
       onDrop={dragHandlers?.onDrop}
       onDragLeave={dragHandlers?.onDragLeave}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-1">
-        <div className="flex items-center gap-1 min-w-0">
-          <GripVertical className="w-3 h-3 text-neutral-300 dark:text-neutral-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
-          <h3 className="text-lg font-semibold text-neutral-900 dark:text-white truncate">
-            {person.name}
-          </h3>
+      {/* Header with photo */}
+      <div className="flex gap-4 mb-3">
+        {/* Photo thumbnail */}
+        <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-neutral-100 dark:bg-neutral-800">
+          {person.photo ? (
+            <img src={`/api/people/photos/${encodeURIComponent(person.photo)}`} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-neutral-300 dark:text-neutral-600">
+              <Users className="w-7 h-7" />
+            </div>
+          )}
         </div>
-        <button
-          onClick={onEdit}
-          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 flex-shrink-0"
-          title="Edit"
-        >
-          <Edit3 className="w-4 h-4" />
-        </button>
+        {/* Name + affiliation + details */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <GripVertical className="w-3 h-3 text-neutral-300 dark:text-neutral-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
+                <h3 className="text-lg font-semibold text-neutral-900 dark:text-white truncate">
+                  {person.name}
+                </h3>
+              </div>
+            </div>
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+              <button onClick={onEdit} className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" title="Edit">
+                <Edit3 className="w-4 h-4" />
+              </button>
+              <button onClick={() => { if (confirmDelete) { onDelete(); setConfirmDelete(false); } else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); } }} className={`p-1 rounded transition-colors ${confirmDelete ? "bg-red-100 dark:bg-red-950 text-red-600" : "hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500"}`} title={confirmDelete ? "Click again to confirm" : "Delete"}>
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          {/* Alias + Role */}
+          {(person.alias || person.role) && (
+            <p className="text-sm text-neutral-500 dark:text-neutral-400 pl-4">
+              {person.alias && <span>{person.alias}</span>}
+              {person.alias && person.role && <span className="text-neutral-300 dark:text-neutral-600 mx-1">·</span>}
+              {person.role && <span>{person.role}</span>}
+            </p>
+          )}
+          {/* Affiliation */}
+          {person.affiliation && (
+            <p className="text-sm text-neutral-400 dark:text-neutral-500 pl-4 truncate">{person.affiliation}</p>
+          )}
+        </div>
       </div>
-      {/* Alias + Role — aligned with name text */}
-      {(person.name_ko || person.role) && (
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-2 pl-4">
-          {person.name_ko && <span>{person.name_ko}</span>}
-          {person.name_ko && person.role && <span className="text-neutral-300 dark:text-neutral-600 mx-1">·</span>}
-          {person.role && <span>{person.role}</span>}
-        </p>
-      )}
 
       {/* Details — text aligned with name */}
       <div className="pl-4">
 
-        {/* Affiliation */}
-        {person.affiliation && (
+        {/* Industry (affiliation moved to header) */}
+        {person.industry && (
           <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400 mb-1">
             <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="truncate">{person.affiliation}</span>
+            <span className="truncate">{person.industry}</span>
           </div>
         )}
 
@@ -560,20 +737,33 @@ function PersonCard({
       </div>
 
 
-        {/* Notes */}
-        {person.notes && (
-          <p className="text-xs text-neutral-500 dark:text-neutral-500 mb-2 line-clamp-2">
-            {person.notes}
-          </p>
-        )}
       </div>
 
-      {/* Projects */}
+      {/* Notes — separated by line, boxed */}
+      {person.notes && (
+        <>
+          <div className="border-t border-neutral-100 dark:border-neutral-800 my-2" />
+          <div className="bg-neutral-50 dark:bg-neutral-800/50 rounded-md px-3 py-2">
+            <p className="text-xs text-neutral-600 dark:text-neutral-400 line-clamp-5 whitespace-pre-line">
+              {person.notes}
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* Projects — show latest 3 in card view, one per line */}
       {person.projects.length > 0 && (
-        <p className="text-xs text-neutral-500 dark:text-neutral-500 mb-1">
-          <span className="font-medium">Projects:</span>{" "}
-          {person.projects.join(", ")}
-        </p>
+        <div className="mt-3">
+          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-500 mb-1">Projects</p>
+          <div className="pl-2 space-y-0.5">
+            {person.projects.slice(-3).map((proj, i) => (
+              <p key={i} className="text-xs text-neutral-500 dark:text-neutral-400 truncate">· {proj}</p>
+            ))}
+            {person.projects.length > 3 && (
+              <p className="text-xs text-neutral-400">+{person.projects.length - 3} more</p>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Connections */}
@@ -591,39 +781,6 @@ function PersonCard({
         </div>
       )}
 
-      {/* Delete action */}
-      <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800 flex justify-end">
-        {confirmDelete ? (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-red-600 dark:text-red-400">
-              {t("people.deleteConfirm")}
-            </span>
-            <button
-              onClick={() => {
-                onDelete();
-                setConfirmDelete(false);
-              }}
-              className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
-            >
-              Yes
-            </button>
-            <button
-              onClick={() => setConfirmDelete(false)}
-              className="text-xs px-2 py-1 rounded text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-            >
-              No
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500 transition-all"
-            title="Delete"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )}
-      </div>
     </div>
   );
 }
@@ -637,6 +794,7 @@ export default function PeoplePage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [allProjectLabels, setAllProjectLabels] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [sortKey, setSortKey] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -664,16 +822,19 @@ export default function PeoplePage() {
 
   // Relationship group filter
   const [relFilter, setRelFilter] = useState<string>("all");
+  // Grouping mode
+  const [groupBy, setGroupBy] = useState<"none" | "hierarchy" | "role" | "industry" | "importance" | "closeness" | "project">("none");
 
   // Checkbox filters
   const [filters, setFilters] = useState<{
     relationships: Set<string>;
     affiliations: Set<string>;
+    industries: Set<string>;
     hierarchies: Set<string>;
     roles: Set<string>;
     importances: Set<string>;
     closenesses: Set<string>;
-  }>({ relationships: new Set(), affiliations: new Set(), hierarchies: new Set(), roles: new Set(), importances: new Set(), closenesses: new Set() });
+  }>({ relationships: new Set(), affiliations: new Set(), industries: new Set(), hierarchies: new Set(), roles: new Set(), importances: new Set(), closenesses: new Set() });
 
   // Persist people order
   useEffect(() => {
@@ -683,6 +844,7 @@ export default function PeoplePage() {
   // Extract unique values for filter checkboxes
   const uniqueRelationships = useMemo(() => [...new Set(people.map((p) => p.relationship).filter(Boolean))], [people]);
   const uniqueAffiliations = useMemo(() => [...new Set(people.map((p) => p.affiliation).filter(Boolean))], [people]);
+  const uniqueIndustries = useMemo(() => [...new Set(people.map((p) => p.industry).filter(Boolean))], [people]);
   const uniqueHierarchies = useMemo(() => [...new Set(people.map((p) => p.hierarchy).filter(Boolean))], [people]);
   const uniqueRoles = useMemo(() => [...new Set(people.map((p) => p.role).filter(Boolean))], [people]);
   const uniqueImportances = useMemo(() => [...new Set(people.map((p) => String(p.importance || 0)).filter((v) => v !== "0"))].sort(), [people]);
@@ -700,7 +862,7 @@ export default function PeoplePage() {
     });
   };
 
-  const hasActiveFilters = filters.relationships.size > 0 || filters.affiliations.size > 0 || filters.hierarchies.size > 0 || filters.roles.size > 0 || filters.importances.size > 0 || filters.closenesses.size > 0;
+  const hasActiveFilters = filters.relationships.size > 0 || filters.affiliations.size > 0 || filters.industries.size > 0 || filters.hierarchies.size > 0 || filters.roles.size > 0 || filters.importances.size > 0 || filters.closenesses.size > 0;
 
   const startListEdit = (person: Person) => {
     setListEditingId(person.id);
@@ -725,7 +887,7 @@ export default function PeoplePage() {
     try {
       const payload = {
         name: editName,
-        name_ko: person.name_ko,
+        alias: person.alias,
         role: editRole,
         affiliation: editAffiliation,
         email: editEmail,
@@ -790,6 +952,9 @@ export default function PeoplePage() {
         case "affiliation":
           cmp = (a.affiliation || "").toLowerCase().localeCompare((b.affiliation || "").toLowerCase());
           break;
+        case "industry":
+          cmp = (a.industry || "zzz").toLowerCase().localeCompare((b.industry || "zzz").toLowerCase());
+          break;
         case "email":
           cmp = (a.email || "").toLowerCase().localeCompare((b.email || "").toLowerCase());
           break;
@@ -797,7 +962,7 @@ export default function PeoplePage() {
           cmp = (a.relationship || "zzz").localeCompare(b.relationship || "zzz");
           break;
         case "hierarchy": {
-          const hOrder = (h: string) => h === "선배" ? "a" : h === "동기" ? "b" : h === "후배" ? "c" : "zzz";
+          const hOrder = (h: string) => h === "선배" ? "a" : h === "동기" ? "b" : h === "후배" ? "c" : h === "???" ? "d" : "zzz";
           cmp = hOrder(a.hierarchy).localeCompare(hOrder(b.hierarchy));
           break;
         }
@@ -827,6 +992,9 @@ export default function PeoplePage() {
     }
     if (filters.affiliations.size > 0) {
       result = result.filter((p) => filters.affiliations.has(p.affiliation));
+    }
+    if (filters.industries.size > 0) {
+      result = result.filter((p) => filters.industries.has(p.industry));
     }
     if (filters.hierarchies.size > 0) {
       result = result.filter((p) => filters.hierarchies.has(p.hierarchy));
@@ -858,8 +1026,19 @@ export default function PeoplePage() {
   const fetchPeople = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await apiFetch<{ people: Person[] }>("/api/people");
-      setPeople(data.people);
+      const [peopleData, projectsData] = await Promise.all([
+        apiFetch<{ people: Person[] }>("/api/people"),
+        apiFetch<{ projects: { name: string; stage: string; metadata: { label?: string } }[] }>("/api/projects").catch(() => ({ projects: [] })),
+      ]);
+      setPeople(peopleData.people);
+      setAllProjectLabels(
+        projectsData.projects
+          .filter((p) => !["5_completed", "6_archived", "7_discarded"].includes(p.stage))
+          .map((p) => p.metadata?.label || p.name)
+          .sort()
+      );
+      // Auto-sync projects→people
+      apiFetch("/api/people/sync-projects", { method: "POST" }).catch(() => {});
     } catch {
       toast.error(t("toast.failedToLoadPeople"));
     } finally {
@@ -985,6 +1164,7 @@ export default function PeoplePage() {
           key={person.id}
           person={person}
           allPeople={people}
+          allProjectLabels={allProjectLabels}
           onEdit={() => setEditingId(person.id)}
           onDelete={() => handleDelete(person.id)}
           editing={editingId === person.id}
@@ -1095,6 +1275,7 @@ export default function PeoplePage() {
             onCancel={() => setShowAddForm(false)}
             saving={saving}
             allPeople={people}
+            allProjectLabels={allProjectLabels}
           />
         </div>
       )}
@@ -1128,16 +1309,47 @@ export default function PeoplePage() {
                 </button>
               );
             })}
+            {/* Group by buttons */}
+            <span className="text-neutral-300 dark:text-neutral-600 mx-1">|</span>
+            {(["none", "hierarchy", "role", "industry", "importance", "closeness", "project"] as const).map((g) => {
+              const labels: Record<string, string> = { none: "Flat", hierarchy: "위계별", role: "역할별", industry: "산업별", importance: "중요도별", closeness: "친밀도별", project: "프로젝트별" };
+              return (
+                <button
+                  key={g}
+                  onClick={() => setGroupBy(groupBy === g ? "none" : g)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    groupBy === g && g !== "none"
+                      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                      : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                  }`}
+                >
+                  {labels[g]}
+                </button>
+              );
+            })}
           </div>
 
-          {/* Checkbox filters — one category per line */}
-          <div className="space-y-1.5 text-xs">
+          {/* Checkbox filters — collapsible */}
+          <details className="text-xs">
+            <summary className="cursor-pointer text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 text-xs mb-1.5 select-none">Filters</summary>
+          <div className="space-y-1.5">
             {uniqueAffiliations.length > 1 && (
               <div className="flex items-center gap-2">
                 <span className="text-neutral-400 font-medium w-14 flex-shrink-0">소속</span>
                 {uniqueAffiliations.map((v) => (
                   <label key={v} className="flex items-center gap-1 cursor-pointer text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
                     <input type="checkbox" checked={filters.affiliations.has(v)} onChange={() => toggleFilter("affiliations", v)} className="w-3 h-3 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500" />
+                    {v}
+                  </label>
+                ))}
+              </div>
+            )}
+            {uniqueIndustries.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-neutral-400 font-medium w-14 flex-shrink-0">산업</span>
+                {uniqueIndustries.map((v) => (
+                  <label key={v} className="flex items-center gap-1 cursor-pointer text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
+                    <input type="checkbox" checked={filters.industries.has(v)} onChange={() => toggleFilter("industries", v)} className="w-3 h-3 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500" />
                     {v}
                   </label>
                 ))}
@@ -1189,13 +1401,14 @@ export default function PeoplePage() {
             )}
             {hasActiveFilters && (
               <button
-                onClick={() => setFilters({ relationships: new Set(), affiliations: new Set(), hierarchies: new Set(), roles: new Set(), importances: new Set(), closenesses: new Set() })}
+                onClick={() => setFilters({ relationships: new Set(), affiliations: new Set(), industries: new Set(), hierarchies: new Set(), roles: new Set(), importances: new Set(), closenesses: new Set() })}
                 className="text-indigo-600 dark:text-indigo-400 hover:underline"
               >
                 Clear filters
               </button>
             )}
           </div>
+          </details>
         </div>
       )}
 
@@ -1212,19 +1425,90 @@ export default function PeoplePage() {
           </p>
         </div>
       ) : viewMode === "card" ? (
-        /* Card grid with self section */
+        /* Card grid with grouping */
         <div className="space-y-6">
-          {/* Self section */}
-          {selfPeople.length > 0 && relFilter === "all" && (
-            <div>
-              <h2 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Self</h2>
-              {renderCardGrid(selfPeople)}
-            </div>
+          {groupBy === "none" ? (
+            <>
+              {/* Self section */}
+              {selfPeople.length > 0 && relFilter === "all" && (
+                <div>
+                  <h2 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Self</h2>
+                  {renderCardGrid(selfPeople)}
+                </div>
+              )}
+              {nonSelfPeople.length > 0 && renderCardGrid(nonSelfPeople)}
+              {relFilter === "self" && renderCardGrid(orderedPeople)}
+            </>
+          ) : (
+            /* Grouped view */
+            (() => {
+              let groupOrder: string[];
+              const groups: Record<string, typeof orderedPeople> = {};
+
+              if (groupBy === "project") {
+                // A person can be in multiple projects
+                const allProjs = new Set<string>();
+                for (const p of orderedPeople) {
+                  for (const proj of (p.projects || [])) { allProjs.add(proj); }
+                  if (!p.projects || p.projects.length === 0) allProjs.add("");
+                }
+                groupOrder = [...allProjs].sort();
+                for (const p of orderedPeople) {
+                  if (!p.projects || p.projects.length === 0) {
+                    if (!groups[""]) groups[""] = [];
+                    groups[""].push(p);
+                  } else {
+                    for (const proj of p.projects) {
+                      if (!groups[proj]) groups[proj] = [];
+                      groups[proj].push(p);
+                    }
+                  }
+                }
+              } else if (groupBy === "importance" || groupBy === "closeness") {
+                groupOrder = ["5", "4", "3", "2", "1", "0"];
+                for (const p of orderedPeople) {
+                  const key = String(groupBy === "importance" ? (p.importance || 0) : (p.closeness || 0));
+                  if (!groups[key]) groups[key] = [];
+                  groups[key].push(p);
+                }
+              } else {
+                const groupKey = groupBy as string;
+                groupOrder = groupBy === "hierarchy" ? ["선배", "동기", "후배", "???", ""] : [...new Set(orderedPeople.map((p) => (p as unknown as Record<string, string>)[groupKey] || ""))].sort();
+                for (const p of orderedPeople) {
+                  const key = (p as unknown as Record<string, string>)[groupKey] || "";
+                  if (!groups[key]) groups[key] = [];
+                  groups[key].push(p);
+                }
+              }
+              return (
+                <>
+                  {/* Self always first */}
+                  {selfPeople.length > 0 && relFilter === "all" && (
+                    <div>
+                      <h2 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Self</h2>
+                      {renderCardGrid(selfPeople)}
+                    </div>
+                  )}
+                  {groupOrder.map((key) => {
+                    const groupPeople = (groups[key] || []).filter((p) => p.relationship !== "self");
+                    if (groupPeople.length === 0) return null;
+                    const label = groupBy === "importance" ? (key === "0" ? "미지정" : "★".repeat(parseInt(key)))
+                      : groupBy === "closeness" ? (key === "0" ? "미지정" : `친밀도 ${key}`)
+                      : key || "미지정";
+                    return (
+                      <div key={key || "__none__"}>
+                        <div className="flex items-center gap-3 mb-3">
+                          <h2 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">{label} ({groupPeople.length})</h2>
+                          <div className="flex-1 h-px bg-neutral-200 dark:bg-neutral-700" />
+                        </div>
+                        {renderCardGrid(groupPeople)}
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()
           )}
-          {/* Others */}
-          {nonSelfPeople.length > 0 && renderCardGrid(nonSelfPeople)}
-          {/* If filtered to self only */}
-          {relFilter === "self" && renderCardGrid(orderedPeople)}
         </div>
       ) : (
         /* List view */
@@ -1233,7 +1517,7 @@ export default function PeoplePage() {
             onPrint={() => {
               const rows = filteredPeople.map((p) => ({
                 Name: p.name,
-                "별칭": p.name_ko || "-",
+                "별칭": p.alias || "-",
                 Role: p.role || "-",
                 Affiliation: p.affiliation || "-",
                 Email: p.email || "-",
@@ -1248,7 +1532,7 @@ export default function PeoplePage() {
             onExportMD={() => {
               const rows = filteredPeople.map((p) => ({
                 Name: p.name,
-                "별칭": p.name_ko || "-",
+                "별칭": p.alias || "-",
                 Role: p.role || "-",
                 Affiliation: p.affiliation || "-",
                 Email: p.email || "-",
@@ -1263,7 +1547,7 @@ export default function PeoplePage() {
             onExportCSV={() => {
               const rows = filteredPeople.map((p) => ({
                 Name: p.name,
-                "별칭": p.name_ko || "",
+                "별칭": p.alias || "",
                 Role: p.role || "",
                 Affiliation: p.affiliation || "",
                 Email: p.email || "",
@@ -1284,6 +1568,7 @@ export default function PeoplePage() {
                     { key: "name", label: "Name" },
                     { key: "role", label: "Role" },
                     { key: "affiliation", label: "Affiliation" },
+                    { key: "industry", label: "산업" },
                     { key: "email", label: "Email" },
                     { key: "relationship", label: "Relationship" },
                     { key: "hierarchy", label: "위계" },
@@ -1334,8 +1619,8 @@ export default function PeoplePage() {
                             <p className="font-medium text-neutral-900 dark:text-white">
                               {person.name}
                             </p>
-                            {person.name_ko && (
-                              <p className="text-xs text-neutral-400">{person.name_ko}</p>
+                            {person.alias && (
+                              <p className="text-xs text-neutral-400">{person.alias}</p>
                             )}
                           </div>
                         )}
@@ -1363,6 +1648,9 @@ export default function PeoplePage() {
                         ) : (
                           <span className="text-neutral-600 dark:text-neutral-400">{person.affiliation || "-"}</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400 text-sm">
+                        {person.industry || "-"}
                       </td>
                       <td className="px-4 py-3">
                         {isEditing ? (

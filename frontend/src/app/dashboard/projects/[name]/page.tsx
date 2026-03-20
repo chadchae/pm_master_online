@@ -3554,11 +3554,12 @@ export default function ProjectDetailPage() {
             </div>
 
             {/* Related People */}
-            <div className="mt-4">
+            <div className="mt-4 pb-40">
               <PeopleTagInput
                 value={metaDraft.related_people ? metaDraft.related_people.split(",").map((s) => s.trim()).filter(Boolean) : []}
                 onChange={(names) => setMetaDraft((d) => ({ ...d, related_people: names.join(", ") }))}
                 label="Related People"
+                projectLabel={project?.metadata?.label || project?.name}
               />
             </div>
 

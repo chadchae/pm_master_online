@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, lazy, Suspense } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, Project, FileItem } from "@/lib/api";
 import { getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
 import {
@@ -62,7 +62,9 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [docs, setDocs] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"documents" | "instructions" | "todo" | "issues" | "schedule" | "settings">("settings");
+  const searchParams = useSearchParams();
+  const initialTab = (searchParams.get("tab") as "documents" | "instructions" | "todo" | "issues" | "schedule" | "settings") || "settings";
+  const [activeTab, setActiveTab] = useState<"documents" | "instructions" | "todo" | "issues" | "schedule" | "settings">(initialTab);
   const [newInstruction, setNewInstruction] = useState("");
   const [newChecklist, setNewChecklist] = useState("");
   const [savingInstruction, setSavingInstruction] = useState(false);

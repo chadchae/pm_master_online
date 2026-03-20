@@ -170,7 +170,7 @@ export default function IssuesDashboardPage() {
                             {projIssues.map((issue) => (
                               <div
                                 key={issue.id}
-                                onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(projName)}`)}
+                                onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(projName)}?tab=issues`)}
                                 className="flex items-center justify-between px-4 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer text-sm border-b border-neutral-50 dark:border-neutral-800/50 last:border-0"
                               >
                                 <div className="flex items-center gap-2 min-w-0">

@@ -5,24 +5,69 @@ import { X, Maximize2, Minimize2 } from "lucide-react";
 
 interface EmbeddedTerminalProps {
   projectPath: string;
-  command: string;
+  command?: string;
+  visible?: boolean;
   onClose: () => void;
   onSessionEnd?: () => void;
 }
 
 export function EmbeddedTerminal({
   projectPath,
-  command,
+  command = "",
+  visible = true,
   onClose,
   onSessionEnd,
 }: EmbeddedTerminalProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const terminalRef = useRef<any>(null);
   const fitRef = useRef<any>(null);
   const [expanded, setExpanded] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [dynamicHeight, setDynamicHeight] = useState(300);
   const sessionEndFired = useRef(false);
+
+  // Calculate height: from container top to bottom of viewport - 5px
+  useEffect(() => {
+    let timerId: ReturnType<typeof setTimeout>;
+    const updateHeight = () => {
+      if (containerRef.current && !expanded) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const h = window.innerHeight - rect.top - 5;
+        setDynamicHeight(Math.max(200, h));
+        clearTimeout(timerId);
+        timerId = setTimeout(() => fitRef.current?.fit(), 50);
+      }
+    };
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    return () => {
+      window.removeEventListener("resize", updateHeight);
+      clearTimeout(timerId);
+    };
+  }, [expanded]);
+
+  // Prevent parent scroll when terminal tab is active
+  useEffect(() => {
+    if (!visible || expanded) return;
+    let target: HTMLElement | null = null;
+    let originalOverflow = "";
+    let el = containerRef.current?.parentElement;
+    while (el) {
+      const style = getComputedStyle(el);
+      if (style.overflow === "auto" || style.overflowY === "auto") {
+        target = el;
+        originalOverflow = style.overflow;
+        el.style.overflow = "hidden";
+        break;
+      }
+      el = el.parentElement;
+    }
+    return () => {
+      if (target) target.style.overflow = originalOverflow;
+    };
+  }, [visible, expanded]);
 
   useEffect(() => {
     let disposed = false;
@@ -181,9 +226,11 @@ export function EmbeddedTerminal({
 
   return (
     <div
+      ref={containerRef}
       className={`border border-neutral-700 rounded-lg overflow-hidden bg-[#0a0a0a] ${
         expanded ? "fixed inset-4 z-50" : ""
       }`}
+      style={expanded ? undefined : { height: dynamicHeight }}
     >
       {/* Terminal header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-neutral-800 border-b border-neutral-700">
@@ -194,7 +241,7 @@ export function EmbeddedTerminal({
             }`}
           />
           <span className="text-xs text-neutral-400 font-mono truncate">
-            claude — {projectPath.split("/").pop()}
+            {command ? "claude" : "shell"} — {projectPath.split("/").pop()}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -223,7 +270,7 @@ export function EmbeddedTerminal({
       {/* Terminal body */}
       <div
         ref={termRef}
-        className={expanded ? "h-[calc(100%-32px)]" : "h-[300px]"}
+        className="h-[calc(100%-32px)]"
       />
     </div>
   );

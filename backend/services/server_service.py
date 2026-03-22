@@ -32,7 +32,21 @@ def _find_project_path(project_name: str) -> Path | None:
 
 
 def _parse_port_from_metadata(project_path: Path) -> int | None:
-    """Extract port number from project's _아이디어노트.md metadata."""
+    """Extract port number from project's _project.yaml or _아이디어노트.md metadata."""
+    import yaml as _yaml
+
+    # New structure: docs/_project.yaml
+    project_yaml = project_path / "docs" / "_project.yaml"
+    if project_yaml.is_file():
+        try:
+            data = _yaml.safe_load(project_yaml.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("포트"):
+                port_str = str(data["포트"]).split("/")[0].strip()
+                return int(port_str)
+        except (OSError, UnicodeDecodeError, _yaml.YAMLError, ValueError):
+            pass
+
+    # Fallback: old structure docs/_아이디어노트.md
     idea_note = project_path / "docs" / "_아이디어노트.md"
     if not idea_note.exists():
         return None
@@ -120,7 +134,7 @@ def _parse_ports(project_path: Path) -> dict[str, int | None]:
 
 def get_server_status() -> list[dict[str, Any]]:
     """Scan all projects for running servers based on known ports."""
-    from services.scanner_service import _parse_idea_note
+    from services.scanner_service import _read_project_yaml
 
     statuses: list[dict[str, Any]] = []
 
@@ -162,8 +176,7 @@ def get_server_status() -> list[dict[str, Any]]:
                     frontend_pid = info["pids"][0] if info["pids"] else None
 
             # Get metadata
-            idea_note = project_dir / "docs" / "_아이디어노트.md"
-            meta = _parse_idea_note(idea_note) if idea_note.exists() else {}
+            meta = _read_project_yaml(project_dir)
 
             statuses.append({
                 "project_name": project_dir.name,

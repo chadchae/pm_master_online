@@ -42,6 +42,19 @@ export async function apiFetch<T = unknown>(
   return res.json();
 }
 
+export async function apiFetchBlob(path: string): Promise<ArrayBuffer> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}${path}`, { headers });
+  if (!res.ok) {
+    throw new Error(`API Error: ${res.status}`);
+  }
+  return res.arrayBuffer();
+}
+
 export async function verifyAuth(): Promise<boolean> {
   try {
     const data = await apiFetch<{ valid: boolean }>("/api/auth/verify");

@@ -2,20 +2,22 @@
   "columns": [
     "todo",
     "in_progress",
-    "done"
+    "done",
+    "waiting",
+    "archive"
   ],
   "items": [
     {
       "id": "deaa2f3d-86e1-4225-bd3d-86085b7644ed",
       "title": "기본코딩 - 메뉴얼",
       "description": "메뉴얼리 코드 뽑기",
-      "column": "todo",
+      "column": "done",
       "priority": "high",
       "assignee": "",
       "created_at": "2026-03-19",
-      "updated_at": "2026-03-19",
-      "order": 0,
-      "completed_at": ""
+      "updated_at": "2026-03-21",
+      "order": 2,
+      "completed_at": "2026-03-21"
     },
     {
       "id": "3182546a-a799-4cf8-896a-1776af0e42ab",
@@ -25,20 +27,75 @@
       "priority": "high",
       "assignee": "",
       "created_at": "2026-03-19",
-      "updated_at": "2026-03-19",
-      "order": 0,
-      "completed_at": "2026-03-19"
+      "updated_at": "2026-03-22",
+      "order": 5,
+      "completed_at": "2026-03-22"
     },
     {
-      "id": "b45e95ff-7675-44df-a451-5ad4b7fa45b8",
-      "title": "병합",
-      "description": "번역된애들 병합",
+      "id": "ea841eca-d6fe-4ef3-84ea-2a7d95df2d68",
+      "title": "아틀라스티아이 에러 원인찾기",
+      "description": "아틀라스티아이 분석후 에러나는데 정상프로젝트열어서 기존문서 임포트할때도 뭔가 에러가 남 시스템 재시작후 다시시도",
+      "column": "done",
+      "priority": "high",
+      "assignee": "채충일",
+      "due_date": "",
+      "created_at": "2026-03-22",
+      "updated_at": "2026-03-22",
+      "completed_at": "2026-03-22",
+      "order": 4
+    },
+    {
+      "id": "bea1ec89-072d-440b-88af-6d5a2e1ec111",
+      "title": "생성된 문서들 읽고 좀 생각해보기",
+      "description": "생성만 해대는지라... 좀 제대로 읽고 볼 시간이 필요함",
       "column": "todo",
+      "priority": "low",
+      "assignee": "채충일",
+      "due_date": "",
+      "created_at": "2026-03-22",
+      "updated_at": "2026-03-22",
+      "completed_at": "",
+      "order": 0,
+      "starred": true
+    },
+    {
+      "id": "9fe51e98-f074-49be-bbfe-bfd3d0ae7d9a",
+      "title": "네트워크분석 추가",
+      "description": "",
+      "column": "done",
       "priority": "medium",
       "assignee": "",
-      "created_at": "2026-03-19",
-      "updated_at": "2026-03-19",
+      "due_date": "",
+      "created_at": "2026-03-22",
+      "updated_at": "2026-03-22",
+      "completed_at": "2026-03-22",
       "order": 1
+    },
+    {
+      "id": "55dab00f-7206-40f7-8d6f-2fa25470e3e2",
+      "title": "토픽모델링분석추가",
+      "description": "",
+      "column": "done",
+      "priority": "medium",
+      "assignee": "",
+      "due_date": "",
+      "created_at": "2026-03-22",
+      "updated_at": "2026-03-22",
+      "completed_at": "2026-03-22",
+      "order": 3
+    },
+    {
+      "id": "8807043e-54ef-40e5-b5b4-48f49ebbeebf",
+      "title": "최종보고서 업데이트",
+      "description": "",
+      "column": "done",
+      "priority": "medium",
+      "assignee": "",
+      "due_date": "",
+      "created_at": "2026-03-22",
+      "updated_at": "2026-03-23",
+      "completed_at": "2026-03-23",
+      "order": 0
     }
   ]
 }

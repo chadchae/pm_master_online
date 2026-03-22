@@ -4,7 +4,7 @@
 # Template - Master Control Script
 # ==============================================================================
 
-VERSION="1.2.0"
+VERSION="2.0.0"
 PROJECT_NAME="PMMasterOnline"
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'

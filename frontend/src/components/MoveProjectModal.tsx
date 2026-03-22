@@ -112,7 +112,7 @@ export function MoveProjectModal({
             />
             {instruction.trim() && (
               <p className="text-xs text-neutral-400 mt-1">
-                Will create <code className="font-mono">작업지시_{new Date().toISOString().split("T")[0]}.md</code> in project docs/
+                Will create <code className="font-mono">작업지시_{new Date().toISOString().split("T")[0]}.md</code> in project docs/작업지시/
               </p>
             )}
           </div>

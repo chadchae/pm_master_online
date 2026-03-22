@@ -3,14 +3,14 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, LogOut, RefreshCw } from "lucide-react";
+import { ChevronRight, LogOut, RefreshCw, Focus, Play, X } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { apiFetch, clearToken } from "@/lib/api";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { useLocale, LocaleToggle } from "@/lib/i18n";
+import { useFocusMode } from "@/lib/focusMode";
 
-// Map paths to page title translation keys
 function getPageTitle(
   pathname: string,
   t: (key: string) => string
@@ -33,7 +33,6 @@ function getPageTitle(
     "/dashboard/trash": t("breadcrumb.trash"),
   };
 
-  // Project detail page
   if (segments.length >= 3 && segments[1] === "projects") {
     const projectName = decodeURIComponent(segments[2]);
     return {
@@ -64,6 +63,8 @@ export function PageHeader() {
   const { t } = useLocale();
   const { breadcrumbs } = getPageTitle(pathname, t);
   const [scanning, setScanning] = useState(false);
+  const isDashboard = pathname === "/dashboard";
+  const { focusMode, focusActive, focusCards, toggleFocusMode, startFocus } = useFocusMode();
 
   const handleRescan = async () => {
     setScanning(true);
@@ -113,6 +114,45 @@ export function PageHeader() {
         >
           <RefreshCw className={`w-4 h-4 ${scanning ? "animate-spin" : ""}`} />
         </button>
+        {isDashboard && (
+          <div className="flex items-center gap-1.5 ml-2">
+            {/* Toggle focus selection mode */}
+            <button
+              onClick={toggleFocusMode}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                focusMode
+                  ? "bg-amber-500 text-white shadow-md shadow-amber-500/25"
+                  : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+              }`}
+              title={t("dashboard.focusMode")}
+            >
+              {focusMode ? <X className="w-3.5 h-3.5" /> : <Focus className="w-3.5 h-3.5" />}
+              {t("dashboard.focusMode")}
+              {focusMode && focusCards.length > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-white/30 text-[10px]">
+                  {focusCards.length}
+                </span>
+              )}
+            </button>
+            {/* Start focus view (only when cards selected, not yet active) */}
+            {focusMode && focusCards.length > 0 && !focusActive && (
+              <button
+                onClick={startFocus}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500 text-white shadow-md shadow-green-500/25 hover:bg-green-600 transition-all animate-pulse"
+                title={t("dashboard.focusStart")}
+              >
+                <Play className="w-3.5 h-3.5" />
+                {t("dashboard.focusStart")}
+              </button>
+            )}
+            {/* Selection hint */}
+            {focusMode && focusCards.length === 0 && !focusActive && (
+              <span className="text-xs text-amber-500 ml-1">
+                {t("dashboard.focusSelectCards")}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2">

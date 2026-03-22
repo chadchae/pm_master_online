@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, Project } from "@/lib/api";
+import { RelatedProjectsInput } from "@/components/RelatedProjectsInput";
 import {
   Loader2,
   Lightbulb,
@@ -49,6 +50,7 @@ export default function IdeasPage() {
   const [newLabel, setNewLabel] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newType, setNewType] = useState("");
+  const [newRelated, setNewRelated] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [draggedIdea, setDraggedIdea] = useState<string | null>(null);
   const [dragOverIdea, setDragOverIdea] = useState<string | null>(null);
@@ -96,12 +98,13 @@ export default function IdeasPage() {
           label: newLabel || newFolder,
           description: newDesc,
           project_type: newType,
+          related_projects: newRelated.join(", "),
           stage: "1_idea_stage",
         }),
       });
       toast.success(`Created "${newLabel || newFolder}"`);
       setShowNewIdea(false);
-      setNewFolder(""); setNewLabel(""); setNewDesc(""); setNewType("");
+      setNewFolder(""); setNewLabel(""); setNewDesc(""); setNewType(""); setNewRelated([]);
       loadIdeas();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create");
@@ -362,6 +365,9 @@ export default function IdeasPage() {
           <div>
             <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1 block">{t("ideas.description")}</label>
             <textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} rows={2} placeholder="What is this idea about?" className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm resize-none focus:outline-none focus:ring-1 focus:ring-amber-500" />
+          </div>
+          <div>
+            <RelatedProjectsInput value={newRelated} onChange={setNewRelated} />
           </div>
           <div className="flex items-center gap-3">
             <div>

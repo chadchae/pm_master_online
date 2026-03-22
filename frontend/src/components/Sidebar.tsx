@@ -10,7 +10,6 @@ import {
   StickyNote,
   BookOpen,
   AlertCircle,
-  FileText,
   BookMarked,
   Clock,
   Server,
@@ -22,11 +21,16 @@ import {
   Trash,
   Terminal,
   ClipboardList,
+  FileText,
+  CheckSquare,
+  BarChart3,
 } from "lucide-react";
 import { PasswordChangeModal } from "./PasswordChangeModal";
 import { QuickNotePanel } from "./QuickNotePanel";
+import { ProjectMemoPanel } from "./ProjectMemoPanel";
 import { WorkExecutionPanel } from "./WorkExecutionPanel";
 import { WorkStatusPanel } from "./WorkStatusPanel";
+import { TodoPanel } from "./TodoPanel";
 import { useLocale } from "@/lib/i18n";
 
 interface NavItemDef {
@@ -39,6 +43,8 @@ const NAV_ITEMS: NavItemDef[] = [
   { labelKey: "sidebar.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { labelKey: "sidebar.ideas", href: "/dashboard/ideas", icon: Lightbulb },
   { labelKey: "sidebar.projects", href: "/dashboard/projects", icon: FolderKanban },
+  { labelKey: "sidebar.todos", href: "/dashboard/todos", icon: ClipboardList },
+  { labelKey: "sidebar.status", href: "/dashboard/status", icon: BarChart3 },
   { labelKey: "sidebar.notes", href: "/dashboard/notes", icon: StickyNote },
   { labelKey: "sidebar.learning", href: "/dashboard/learning", icon: BookOpen },
   { labelKey: "sidebar.issues", href: "/dashboard/issues", icon: AlertCircle },
@@ -57,8 +63,10 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showQuickNote, setShowQuickNote] = useState(false);
+  const [showProjectMemo, setShowProjectMemo] = useState(false);
   const [showWorkExec, setShowWorkExec] = useState(false);
   const [showWorkStatus, setShowWorkStatus] = useState(false);
+  const [showTodo, setShowTodo] = useState(false);
 
   const fromIdeas = searchParams.get("from") === "ideas";
   const isActive = (href: string) => {
@@ -124,6 +132,16 @@ export function Sidebar() {
 
         {/* Bottom actions */}
         <div className="border-t border-neutral-200 dark:border-neutral-800 p-2 space-y-0.5">
+          {/* Todo button */}
+          <button
+            onClick={() => setShowTodo(true)}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30 hover:text-purple-700 dark:hover:text-purple-300 transition-colors w-full"
+            title={collapsed ? t("sidebar.todo") : undefined}
+          >
+            <CheckSquare className="w-5 h-5 flex-shrink-0" />
+            {!collapsed && <span>{t("sidebar.todo")}</span>}
+          </button>
+
           {/* Work Execution button */}
           <button
             onClick={() => setShowWorkExec(true)}
@@ -138,10 +156,10 @@ export function Sidebar() {
           <button
             onClick={() => setShowWorkStatus(true)}
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-700 dark:hover:text-blue-300 transition-colors w-full"
-            title={collapsed ? t("sidebar.status") : undefined}
+            title={collapsed ? t("sidebar.quickStatus") : undefined}
           >
             <ClipboardList className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span>{t("sidebar.status")}</span>}
+            {!collapsed && <span>{t("sidebar.quickStatus")}</span>}
           </button>
 
           {/* Quick Note button */}
@@ -152,6 +170,16 @@ export function Sidebar() {
           >
             <Pencil className="w-5 h-5 flex-shrink-0" />
             {!collapsed && <span>{t("sidebar.quickNote")}</span>}
+          </button>
+
+          {/* 프로젝트메모 button */}
+          <button
+            onClick={() => setShowProjectMemo(true)}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors w-full"
+            title={collapsed ? t("sidebar.projectMemo") : undefined}
+          >
+            <FolderKanban className="w-5 h-5 flex-shrink-0" />
+            {!collapsed && <span>{t("sidebar.projectMemo")}</span>}
           </button>
 
           <button
@@ -198,6 +226,13 @@ export function Sidebar() {
         open={showQuickNote}
         onClose={() => setShowQuickNote(false)}
       />
+
+      <ProjectMemoPanel
+        open={showProjectMemo}
+        onClose={() => setShowProjectMemo(false)}
+      />
+
+      <TodoPanel open={showTodo} onClose={() => setShowTodo(false)} />
     </>
   );
 }

@@ -15,6 +15,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "sidebar.dashboard": "대시보드",
     "sidebar.ideas": "아이디어",
     "sidebar.projects": "프로젝트",
+    "sidebar.todos": "할일",
+    "sidebar.status": "현황",
     "sidebar.documents": "문서",
     "sidebar.notes": "노트",
     "sidebar.learning": "학습",
@@ -25,9 +27,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "sidebar.servers": "서버",
     "sidebar.people": "사람",
     "sidebar.trash": "휴지통",
-    "sidebar.execute": "실행",
-    "sidebar.status": "현황",
+    "sidebar.execute": "빠른 실행",
+    "sidebar.quickStatus": "빠른 현황",
     "sidebar.quickNote": "빠른 메모",
+    "sidebar.projectMemo": "프로젝트메모",
+    "sidebar.todo": "빠른 할일",
     "sidebar.settings": "설정",
     "sidebar.collapse": "접기",
 
@@ -51,6 +55,10 @@ const translations: Record<Locale, Record<string, string>> = {
     "action.none": "선택해제",
 
     // Dashboard
+    "dashboard.focusMode": "집중모드",
+    "dashboard.focusModeMax": "최대 3개까지 선택 가능합니다",
+    "dashboard.focusStart": "집중 시작",
+    "dashboard.focusSelectCards": "카드를 선택하세요",
     "dashboard.ideas": "아이디어",
     "dashboard.activeProjects": "활성 프로젝트",
     "dashboard.activeServers": "활성 서버",
@@ -68,7 +76,9 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // Project detail
     "project.documents": "문서",
+    "project.notes": "메모",
     "project.instructions": "작업지시",
+    "project.terminal": "터미널",
     "project.todo": "할일",
     "project.settings": "설정",
     "project.projectInfo": "프로젝트 정보",
@@ -108,6 +118,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "todo.todo": "할 일",
     "todo.inProgress": "진행 중",
     "todo.done": "완료",
+    "todo.waiting": "대기",
+    "todo.archive": "보관",
     "todo.addTask": "작업 추가",
     "todo.taskTitle": "작업 제목",
     "todo.description": "설명",
@@ -183,6 +195,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "subtask.description": "설명",
     "subtask.deleteConfirm": "이 하위 작업을 삭제하시겠습니까?",
     "subtask.noSubtasks": "하위 작업 없음",
+    "subtask.progress": "진행률",
 
     // Ideas page
     "ideas.inPipeline": "아이디어 파이프라인",
@@ -367,6 +380,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "sidebar.dashboard": "Dashboard",
     "sidebar.ideas": "Ideas",
     "sidebar.projects": "Projects",
+    "sidebar.todos": "Todos",
+    "sidebar.status": "Project Status",
     "sidebar.documents": "Documents",
     "sidebar.notes": "Notes",
     "sidebar.learning": "Learning",
@@ -377,9 +392,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "sidebar.servers": "Servers",
     "sidebar.people": "People",
     "sidebar.trash": "Trash",
-    "sidebar.execute": "Execute",
-    "sidebar.status": "Status",
+    "sidebar.execute": "Quick Exec",
+    "sidebar.quickStatus": "Quick Status",
     "sidebar.quickNote": "Quick Note",
+    "sidebar.projectMemo": "Project Memo",
+    "sidebar.todo": "Quick Todo",
     "sidebar.settings": "Settings",
     "sidebar.collapse": "Collapse",
 
@@ -403,6 +420,10 @@ const translations: Record<Locale, Record<string, string>> = {
     "action.none": "None",
 
     // Dashboard
+    "dashboard.focusMode": "Focus Mode",
+    "dashboard.focusModeMax": "You can select up to 3 cards",
+    "dashboard.focusStart": "Start Focus",
+    "dashboard.focusSelectCards": "Select cards",
     "dashboard.ideas": "Ideas",
     "dashboard.activeProjects": "Active Projects",
     "dashboard.activeServers": "Active Servers",
@@ -420,7 +441,9 @@ const translations: Record<Locale, Record<string, string>> = {
 
     // Project detail
     "project.documents": "Documents",
+    "project.notes": "Notes",
     "project.instructions": "Instructions",
+    "project.terminal": "Terminal",
     "project.todo": "Todo",
     "project.settings": "Settings",
     "project.projectInfo": "Project Information",
@@ -460,6 +483,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "todo.todo": "To Do",
     "todo.inProgress": "In Progress",
     "todo.done": "Done",
+    "todo.waiting": "Waiting",
+    "todo.archive": "Archive",
     "todo.addTask": "Add Task",
     "todo.taskTitle": "Task title",
     "todo.description": "Description",
@@ -535,6 +560,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "subtask.description": "Description",
     "subtask.deleteConfirm": "Delete this subtask?",
     "subtask.noSubtasks": "No subtasks",
+    "subtask.progress": "Progress",
 
     // Ideas page
     "ideas.inPipeline": "ideas in pipeline",

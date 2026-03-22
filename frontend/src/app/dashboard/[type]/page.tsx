@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useState, useRef, lazy, Suspense } from "react";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { useParams } from "next/navigation";
 import { apiFetch, FileItem } from "@/lib/api";
 import {
@@ -18,19 +20,68 @@ import {
   Folder,
   ChevronLeft,
   Printer,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useTheme } from "next-themes";
 import { ConfirmDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
 const MarkdownPreview = lazy(() => import("@uiw/react-markdown-preview"));
 
+function MermaidBlock({ code }: { code: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let cancelled = false;
+    import("mermaid").then((m) => {
+      m.default.initialize({ startOnLoad: false, theme: "default" });
+      const id = "mermaid-" + Math.random().toString(36).slice(2, 9);
+      m.default.render(id, code).then(({ svg }) => {
+        if (!cancelled && ref.current) ref.current.innerHTML = svg;
+      }).catch(() => {
+        if (!cancelled && ref.current) ref.current.textContent = code;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [code]);
+  return <div ref={ref} className="flex justify-center p-4 overflow-auto" />;
+}
+
+function KaTeXBlock({ math, display }: { math: string; display?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    import("katex").then((k) => {
+      // katex CSS loaded via CDN in layout
+      if (ref.current) {
+        ref.current.innerHTML = k.default.renderToString(math, { displayMode: !!display, throwOnError: false });
+      }
+    });
+  }, [math, display]);
+  return <span ref={ref} />;
+}
+
+const mdComponents = {
+  code: ({ children, className, ...props }: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) => {
+    const lang = className?.replace("language-", "") || "";
+    const text = String(children).replace(/\n$/, "");
+    if (lang === "mermaid") return <MermaidBlock code={text} />;
+    if (lang === "math" || lang === "katex" || lang === "latex") return <KaTeXBlock math={text} display />;
+    return <code className={className} {...props}>{children}</code>;
+  },
+};
+
 const VALID_TYPES = ["documents", "notes", "learning", "issues", "issue-docs", "guidelines"];
 
 export default function CommonFolderPage() {
   const params = useParams();
   const { t } = useLocale();
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const colorMode = mounted && resolvedTheme === "dark" ? "dark" : "light";
   const type = params.type as string;
 
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -57,6 +108,8 @@ export default function CommonFolderPage() {
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+  const [fileSortKey, setFileSortKey] = useState<"name" | "type">("name");
+  const [fileSortDir, setFileSortDir] = useState<"asc" | "desc">("asc");
 
   const isValid = VALID_TYPES.includes(type);
 
@@ -205,9 +258,27 @@ export default function CommonFolderPage() {
     }
   };
 
+  const getExt = (name: string) => { const i = name.lastIndexOf("."); return i > 0 ? name.slice(i + 1).toLowerCase() : ""; };
   const filtered = files.filter((f) =>
     f.filename.toLowerCase().includes(search.toLowerCase())
   );
+  const sortedFiles = [...filtered].sort((a, b) => {
+    const aFolder = (a as any).is_directory ? 1 : 0;
+    const bFolder = (b as any).is_directory ? 1 : 0;
+    if (aFolder !== bFolder) return bFolder - aFolder;
+    const dir = fileSortDir === "asc" ? 1 : -1;
+    if (fileSortKey === "type") {
+      const aExt = aFolder ? "" : getExt(a.filename);
+      const bExt = bFolder ? "" : getExt(b.filename);
+      const cmp = aExt.localeCompare(bExt);
+      return cmp !== 0 ? cmp * dir : a.filename.localeCompare(b.filename) * dir;
+    }
+    return a.filename.localeCompare(b.filename) * dir;
+  });
+  const toggleFileSort = (key: "name" | "type") => {
+    if (fileSortKey === key) setFileSortDir(fileSortDir === "asc" ? "desc" : "asc");
+    else { setFileSortKey(key); setFileSortDir("asc"); }
+  };
 
   if (!isValid) {
     return (
@@ -326,9 +397,19 @@ export default function CommonFolderPage() {
           </div>
         </div>
 
+        {/* Sort header */}
+        <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 text-xs text-neutral-500 dark:text-neutral-400">
+          <button onClick={() => toggleFileSort("name")} className="flex-1 flex items-center gap-1 px-3 py-1.5 hover:text-neutral-700 dark:hover:text-neutral-200">
+            Name {fileSortKey === "name" ? (fileSortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+          </button>
+          <button onClick={() => toggleFileSort("type")} className="w-16 flex items-center gap-1 px-2 py-1.5 hover:text-neutral-700 dark:hover:text-neutral-200">
+            Type {fileSortKey === "type" ? (fileSortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+          </button>
+        </div>
+
         {/* File list */}
         <div className="flex-1 overflow-y-auto divide-y divide-neutral-100 dark:divide-neutral-800">
-          {filtered.map((file) => (
+          {sortedFiles.map((file) => (
             <div
               key={file.filename}
               className={`flex items-center group ${
@@ -364,6 +445,7 @@ export default function CommonFolderPage() {
                     {(file.size / 1024).toFixed(1)} KB
                   </p>
                 </div>
+                <span className="w-12 text-xs text-neutral-400 text-right flex-shrink-0">{(file as any).is_directory ? "folder" : getExt(file.filename) || "file"}</span>
               </button>
               {!selectMode && (
                 <button
@@ -490,7 +572,7 @@ export default function CommonFolderPage() {
                 onKeyDown={(e) => { if (e.key === "Enter") createNewFile(); }}
               />
             </div>
-            <div className="flex-1 overflow-hidden" data-color-mode="dark">
+            <div className="flex-1 overflow-hidden" data-color-mode={colorMode}>
               <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin text-neutral-400" /></div>}>
                 <MDEditor
                   value={newFileContent}
@@ -592,7 +674,7 @@ export default function CommonFolderPage() {
                 )}
               </div>
             </div>
-            <div className="flex-1 overflow-auto" data-color-mode="dark">
+            <div className="flex-1 overflow-auto" data-color-mode={colorMode}>
               {isEditing ? (
                 <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
                   <MDEditor
@@ -602,11 +684,21 @@ export default function CommonFolderPage() {
                     preview="live"
                   />
                 </Suspense>
-              ) : selectedFile?.endsWith(".md") ? (
+              ) : (selectedFile?.endsWith(".html") || selectedFile?.endsWith(".htm")) ? (
+                <iframe
+                  srcDoc={content}
+                  className="w-full h-full border-0"
+                  title={selectedFile || ""}
+                  sandbox="allow-scripts allow-same-origin"
+                />
+              ) : (selectedFile?.endsWith(".md") || selectedFile?.endsWith(".rmd") || selectedFile?.endsWith(".qmd")) ? (
                 <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
                   <MarkdownPreview
-                    source={content}
+                    source={content.replace(/\\text\{([^}]*)}/g, (m: string, inner: string) => "\\text{" + inner.replace(/(?<!\\)%/g, "\\%") + "}")}
                     style={{ padding: "1rem", backgroundColor: "transparent" }}
+                    components={mdComponents}
+                    remarkPlugins={[remarkMath]}
+                    rehypePlugins={[[rehypeKatex, { strict: "ignore", throwOnError: false, output: "html" }]]}
                   />
                 </Suspense>
               ) : (

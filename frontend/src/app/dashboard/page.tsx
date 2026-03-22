@@ -4,12 +4,13 @@ import { useEffect, useState, DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, Project, ServerStatus } from "@/lib/api";
 import { STAGES, KANBAN_STAGES, getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
-import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock, Pencil, Trash2, Download, Plus, X, Copy } from "lucide-react";
+import { FolderKanban, Server, Layers, Loader2, GripVertical, Lightbulb, LayoutGrid, List, Clock, Pencil, Trash2, Download, Plus, X, Copy, ListTodo } from "lucide-react";
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { MoveProjectModal } from "@/components/MoveProjectModal";
 import { ConfirmDialog, PromptDialog, NewProjectDialog } from "@/components/AppDialogs";
 import { useLocale } from "@/lib/i18n";
+import { useFocusMode } from "@/lib/focusMode";
 import { ListExportBar, generateMD, generateCSV, downloadFile, printList } from "@/components/ListExportBar";
 import toast from "react-hot-toast";
 
@@ -123,6 +124,8 @@ export default function DashboardPage() {
   const [editLabel, setEditLabel] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editType, setEditType] = useState("");
+  const { focusMode, focusActive, handleFocusCardClick, getFocusBadge, isFocusDimmed, isFocusHidden } = useFocusMode();
+
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [promptDialog, setPromptDialog] = useState<{ title: string; defaultValue?: string; onConfirm: (val: string) => void } | null>(null);
   const [isDark, setIsDark] = useState(false);
@@ -159,16 +162,28 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
+  const [todoSummary, setTodoSummary] = useState<{ total: number; todo: number; wip: number; done: number; starred: number }>({ total: 0, todo: 0, wip: 0, done: 0, starred: 0 });
+
   const loadData = async () => {
     try {
-      const [projectsRes, serversRes, orderRes] = await Promise.all([
+      const [projectsRes, serversRes, orderRes, todosRes] = await Promise.all([
         apiFetch<{ projects: Project[] }>("/api/projects"),
         apiFetch<{ servers: ServerStatus[] }>("/api/servers/status").catch(() => ({ servers: [] })),
         apiFetch<Record<string, string[]>>("/api/card-order").catch(() => ({})),
+        apiFetch<{ projects: { items: { column: string; starred?: boolean }[] }[] }>("/api/todos/all?include_done=1").catch(() => ({ projects: [] })),
       ]);
       setProjects(projectsRes.projects || []);
       setServers(serversRes.servers || []);
       setCardOrder(orderRes || {});
+      // Aggregate todo stats
+      const allItems = (todosRes.projects || []).flatMap((p) => p.items || []);
+      setTodoSummary({
+        total: allItems.length,
+        todo: allItems.filter((i) => i.column === "todo").length,
+        wip: allItems.filter((i) => i.column === "in_progress").length,
+        done: allItems.filter((i) => i.column === "done").length,
+        starred: allItems.filter((i) => i.starred && i.column !== "done").length,
+      });
     } catch (err) {
       toast.error(t("toast.failedToLoadData"));
     } finally {
@@ -383,12 +398,12 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-stretch">
         <div
           className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5 cursor-pointer hover:border-amber-300 dark:hover:border-amber-700 transition-colors"
           onClick={() => router.push("/dashboard/ideas")}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950">
               <Lightbulb className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             </div>
@@ -400,7 +415,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5">
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <div className="p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950">
               <FolderKanban className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             </div>
@@ -435,7 +450,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5">
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <div className="p-2.5 rounded-lg bg-green-50 dark:bg-green-950">
               <Server className="w-5 h-5 text-green-600 dark:text-green-400" />
             </div>
@@ -446,13 +461,34 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <div
+          className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5 cursor-pointer hover:border-purple-300 dark:hover:border-purple-700 transition-colors"
+          onClick={() => router.push("/dashboard/todos")}
+        >
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950">
+              <ListTodo className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-neutral-900 dark:text-white">{todoSummary.total - todoSummary.done}</p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">{t("sidebar.todos")}</p>
+              <div className="flex flex-wrap gap-1 mt-1">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">todo {todoSummary.todo}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">wip {todoSummary.wip}</span>
+                {todoSummary.starred > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">★ {todoSummary.starred}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5">
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950">
               <Layers className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             </div>
             <div>
-              <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-1">{t("dashboard.byStage")}</p>
               <div className="flex flex-wrap gap-1.5">
                 {stageCounts.filter(s => s.count > 0).map((s) => (
                   <span
@@ -605,7 +641,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="flex-1 p-2 space-y-2 overflow-y-auto">
-                    {stageProjects.map((project) => (
+                    {stageProjects.filter((p) => !isFocusHidden(p.name)).map((project) => (
                       <div
                         key={project.name}
                         draggable
@@ -626,8 +662,19 @@ export default function DashboardPage() {
                           }
                         }}
                         onDragLeave={() => setDragOverCard(null)}
-                        onClick={() => { if (editingCard !== project.name) router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`); }}
-                        className={`group p-2.5 rounded-lg border transition-all hover:shadow-sm cursor-pointer ${
+                        onClick={() => {
+                          if (focusMode && !focusActive) { handleFocusCardClick(project.name, () => toast(t("dashboard.focusModeMax"), { icon: "🔒" })); return; }
+                          if (editingCard !== project.name) router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`);
+                        }}
+                        className={`group p-2.5 rounded-lg border transition-all cursor-pointer relative ${
+                          isFocusDimmed(project.name)
+                            ? "opacity-30 pointer-events-auto"
+                            : "hover:shadow-sm"
+                        } ${
+                          getFocusBadge(project.name)
+                            ? "ring-2 ring-amber-500 shadow-md"
+                            : ""
+                        } ${
                           draggedProject?.name === project.name
                             ? `opacity-50 ${theme.cardBorder}`
                             : dragOverCard === project.name && draggedProject?.stage === stage.folder
@@ -635,6 +682,11 @@ export default function DashboardPage() {
                             : `${theme.cardBorder} ${theme.card} ${theme.cardHover}`
                         }`}
                       >
+                        {getFocusBadge(project.name) && (
+                          <span className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center shadow-sm z-10">
+                            {getFocusBadge(project.name)}
+                          </span>
+                        )}
                         {editingCard === project.name ? (
                           <div className="p-2.5 space-y-2" onClick={(e) => e.stopPropagation()}>
                             <input
@@ -977,16 +1029,28 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {sortedListProjects.map((project) => {
+                {sortedListProjects.filter((p) => !isFocusHidden(p.name)).map((project) => {
                   const pStage = getStageByFolder(project.stage);
                   return (
                     <tr
                       key={project.name}
-                      onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`)}
-                      className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors"
+                      onClick={() => {
+                        if (focusMode && !focusActive) { handleFocusCardClick(project.name, () => toast(t("dashboard.focusModeMax"), { icon: "🔒" })); return; }
+                        router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`);
+                      }}
+                      className={`cursor-pointer transition-all ${
+                        isFocusDimmed(project.name)
+                          ? "opacity-30"
+                          : "hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
+                      } ${getFocusBadge(project.name) ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}`}
                     >
                       <td className="px-4 py-3">
-                        <div>
+                        <div className="flex items-center gap-2">
+                          {getFocusBadge(project.name) && (
+                            <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                              {getFocusBadge(project.name)}
+                            </span>
+                          )}
                           <p className="font-medium text-neutral-900 dark:text-white">
                             {project.metadata?.label || project.name}
                           </p>
@@ -1107,6 +1171,7 @@ export default function DashboardPage() {
 
       <NewProjectDialog
         open={showNewProject}
+        typeOptions={[...new Set(projects.map((p) => p.metadata?.["유형"] || "").filter(Boolean))].sort()}
         onCancel={() => setShowNewProject(false)}
         onConfirm={async (data) => {
           setShowNewProject(false);
@@ -1117,6 +1182,7 @@ export default function DashboardPage() {
                 folder_name: data.folder,
                 label: data.label,
                 project_type: data.projectType,
+                related_projects: data.relatedProjects,
                 stage: "2_initiation_stage",
               }),
             });

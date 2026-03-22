@@ -2,6 +2,7 @@
 
 import { useState, useEffect, ReactNode } from "react";
 import { X } from "lucide-react";
+import { RelatedProjectsInput } from "./RelatedProjectsInput";
 
 // ===== Confirm Dialog =====
 interface ConfirmDialogProps {
@@ -124,7 +125,7 @@ export function PromptDialog({ open, title, message, placeholder, defaultValue =
 interface NewProjectDialogProps {
   open: boolean;
   typeOptions?: string[];
-  onConfirm: (data: { folder: string; label: string; projectType: string }) => void;
+  onConfirm: (data: { folder: string; label: string; projectType: string; relatedProjects: string }) => void;
   onCancel: () => void;
 }
 
@@ -134,9 +135,10 @@ export function NewProjectDialog({ open, typeOptions, onConfirm, onCancel }: New
   const [typeChoice, setTypeChoice] = useState("개발");
   const [customType, setCustomType] = useState("");
   const [showCustom, setShowCustom] = useState(false);
+  const [relatedProjects, setRelatedProjects] = useState<string[]>([]);
 
   useEffect(() => {
-    if (open) { setFolder(""); setLabel(""); setTypeChoice("개발"); setCustomType(""); setShowCustom(false); }
+    if (open) { setFolder(""); setLabel(""); setTypeChoice("개발"); setCustomType(""); setShowCustom(false); setRelatedProjects([]); }
   }, [open]);
 
   useEffect(() => {
@@ -155,6 +157,7 @@ export function NewProjectDialog({ open, typeOptions, onConfirm, onCancel }: New
       folder: folder.trim().toLowerCase().replace(/\s+/g, "-"),
       label: label.trim() || folder.trim(),
       projectType: finalType,
+      relatedProjects: relatedProjects.join(", "),
     });
   };
 
@@ -186,6 +189,9 @@ export function NewProjectDialog({ open, typeOptions, onConfirm, onCancel }: New
             {showCustom && (
               <input value={customType} onChange={(e) => setCustomType(e.target.value)} placeholder="Custom type..." className="w-full mt-2 px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 text-neutral-900 dark:text-white" />
             )}
+          </div>
+          <div>
+            <RelatedProjectsInput value={relatedProjects} onChange={setRelatedProjects} />
           </div>
         </div>
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-neutral-100 dark:border-neutral-800">

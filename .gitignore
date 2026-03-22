@@ -50,3 +50,12 @@ frontend/prisma/dev.db-journal
 backend/data/auth.json
 backend/data/tokens.json
 backend/data/card_order.json
+
+# Per-project runtime data (user data, not app code)
+backend/data/todos/
+backend/data/issues/
+backend/data/schedules/
+backend/data/subtasks/
+
+# Auto-generated project meta snapshots
+docs/_settings/

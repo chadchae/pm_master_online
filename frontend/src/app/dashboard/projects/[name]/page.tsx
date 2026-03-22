@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef, lazy, Suspense } from "react";
+import React, { useEffect, useState, useRef, lazy, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { apiFetch, Project, FileItem } from "@/lib/api";
+import { apiFetch, apiFetchBlob, Project, FileItem } from "@/lib/api";
 import { getStageBadgeClasses, getStageByFolder } from "@/lib/stages";
 import {
   Loader2,
@@ -26,6 +26,7 @@ import {
   Eye,
   Folder,
   ChevronLeft,
+  ChevronRight,
   Pencil,
   CircleDot,
   CheckCircle,
@@ -41,22 +42,91 @@ import {
   Download,
   Printer,
   Copy,
+  TerminalSquare,
+  RotateCcw,
+  Bot,
+  Maximize2,
+  Minimize2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  FolderSymlink,
 } from "lucide-react";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
-const MarkdownPreview = lazy(() => import("@uiw/react-markdown-preview"));
+import { DocumentViewer } from "@/components/project/DocumentViewer";
+import { TodoBoard } from "@/components/project/TodoBoard";
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
 import { PeopleTagInput } from "@/components/PeopleTagInput";
+import { RelatedProjectsInput } from "@/components/RelatedProjectsInput";
 import { ListExportBar, generateMD, generateCSV, downloadFile, printList } from "@/components/ListExportBar";
 import { ConfirmDialog, PromptDialog } from "@/components/AppDialogs";
+import dynamic from "next/dynamic";
+const EmbeddedTerminal = dynamic(() => import("@/components/EmbeddedTerminal").then(m => ({ default: m.EmbeddedTerminal })), { ssr: false });
 import toast from "react-hot-toast";
+import { useTheme } from "next-themes";
 import { useLocale } from "@/lib/i18n";
+
+function MoveFolderTree({ folders, selectedFolder, expandedFolders, onSelect, onToggle }: {
+  folders: string[]; selectedFolder: string; expandedFolders: Set<string>;
+  onSelect: (f: string) => void; onToggle: (f: string) => void;
+}) {
+  const tree: Record<string, string[]> = {};
+  for (const f of folders) {
+    if (f === "") continue;
+    const parts = f.split("/");
+    const parent = parts.length === 1 ? "" : parts.slice(0, -1).join("/");
+    if (!tree[parent]) tree[parent] = [];
+    tree[parent].push(f);
+  }
+  const renderNode = (path: string, depth: number): React.ReactNode => {
+    const children = tree[path] || [];
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedFolders.has(path);
+    const isSelected = selectedFolder === path;
+    const label = path === "" ? "/ (docs root)" : path.split("/").pop();
+    return (
+      <div key={path}>
+        <div
+          className={`flex items-center text-xs cursor-pointer transition-colors ${isSelected ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300" : "hover:bg-neutral-100 dark:hover:bg-neutral-700/50 text-neutral-700 dark:text-neutral-300"}`}
+          style={{ paddingLeft: `${4 + depth * 14}px` }}
+        >
+          {hasChildren ? (
+            <button onClick={() => onToggle(path)} className="p-0.5 hover:bg-neutral-200 dark:hover:bg-neutral-600 rounded">
+              {isExpanded ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+            </button>
+          ) : (
+            <span className="w-4" />
+          )}
+          <button onClick={() => onSelect(path)} className="flex-1 flex items-center gap-1 py-1 text-left min-w-0">
+            <Folder className={`w-3 h-3 flex-shrink-0 ${path === "" ? "text-indigo-500" : "text-amber-500"}`} />
+            <span className="truncate">{label}</span>
+          </button>
+        </div>
+        {hasChildren && isExpanded && children.map((c) => renderNode(c, depth + 1))}
+      </div>
+    );
+  };
+  return (
+    <div className="max-h-48 overflow-y-auto border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 py-0.5">
+      {renderNode("", 0)}
+    </div>
+  );
+}
 
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { t } = useLocale();
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const colorMode = mounted && resolvedTheme === "dark" ? "dark" : "light";
   const name = decodeURIComponent(params.name as string);
 
   const [project, setProject] = useState<Project | null>(null);
@@ -64,14 +134,26 @@ export default function ProjectDetailPage() {
   const [docs, setDocs] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get("tab") as "documents" | "instructions" | "todo" | "issues" | "schedule" | "settings") || "settings";
-  const [activeTab, setActiveTab] = useState<"documents" | "instructions" | "todo" | "issues" | "schedule" | "settings">(initialTab);
+  const initialTab = (searchParams.get("tab") as "documents" | "notes" | "instructions" | "todo" | "issues" | "schedule" | "settings" | "terminal") || "settings";
+  const [activeTab, setActiveTab] = useState<"documents" | "notes" | "instructions" | "todo" | "issues" | "schedule" | "settings" | "terminal">(initialTab);
+  const [terminalMode, setTerminalMode] = useState<"shell" | "claude" | null>(null);
+  const [terminalSessionKey, setTerminalSessionKey] = useState(0);
   const [newInstruction, setNewInstruction] = useState("");
   const [newChecklist, setNewChecklist] = useState("");
   const [savingInstruction, setSavingInstruction] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState(false);
   const [docSelectMode, setDocSelectMode] = useState(false);
   const [docSelected, setDocSelected] = useState<Set<string>>(new Set());
+  const [docSortKey, setDocSortKey] = useState<"name" | "type">("name");
+  const [renamingDoc, setRenamingDoc] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [showMovePanel, setShowMovePanel] = useState(false);
+  const [moveFolders, setMoveFolders] = useState<string[]>([]);
+  const [moveSelectedFolder, setMoveSelectedFolder] = useState("");
+  const [moveExpandedFolders, setMoveExpandedFolders] = useState<Set<string>>(new Set());
+  const [loadingMoveFolders, setLoadingMoveFolders] = useState(false);
+  const [movingDocs, setMovingDocs] = useState(false);
+  const [docSortDir, setDocSortDir] = useState<"asc" | "desc">("asc");
   const [showNewDoc, setShowNewDoc] = useState(false);
   const [showNewDocMenu, setShowNewDocMenu] = useState(false);
   const [showNewDocFolder, setShowNewDocFolder] = useState(false);
@@ -81,7 +163,39 @@ export default function ProjectDetailPage() {
   const [creatingDoc, setCreatingDoc] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
   const [docPath, setDocPath] = useState("");  // current subfolder path
+  const docBasePath = activeTab === "notes" ? "_settings/project_note" : "";
+  const getApiDocPath = (relativePath: string): string => {
+    if (!docBasePath) return relativePath;
+    return relativePath ? `${docBasePath}/${relativePath}` : docBasePath;
+  };
   const [docContent, setDocContent] = useState("");
+  const [docBlobUrl, setDocBlobUrl] = useState<string | null>(null);
+  const [docHtml, setDocHtml] = useState<string | null>(null);
+  const [docFullscreen, setDocFullscreen] = useState(false);
+  useEffect(() => {
+    if (!docFullscreen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setDocFullscreen(false); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [docFullscreen]);
+  // Reset document state when switching between documents and notes tabs
+  const prevTabRef = useRef(activeTab);
+  useEffect(() => {
+    const prev = prevTabRef.current;
+    prevTabRef.current = activeTab;
+    const docTabs = ["documents", "notes"] as const;
+    if (docTabs.includes(activeTab as any) && prev !== activeTab) {
+      setDocPath("");
+      setSelectedDoc(null);
+      setDocContent("");
+      setDocBlobUrl(null);
+      setDocHtml(null);
+      setIsEditing(false);
+      setShowNewDoc(false);
+      loadDocs("");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
@@ -102,6 +216,7 @@ export default function ProjectDetailPage() {
     협업: "",
     주도: "",
     오너: "",
+    연관프로젝트: "",
     목표종료일: "",
     실제종료일: "",
     related_people: "",
@@ -125,6 +240,8 @@ export default function ProjectDetailPage() {
   const [editSubtaskTitle, setEditSubtaskTitle] = useState("");
   const [editSubtaskDesc, setEditSubtaskDesc] = useState("");
   const [dragSubtaskId, setDragSubtaskId] = useState<string | null>(null);
+  const subtasksRef = useRef(subtasks);
+  useEffect(() => { subtasksRef.current = subtasks; }, [subtasks]);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [promptDialog, setPromptDialog] = useState<{ title: string; message?: string; placeholder?: string; defaultValue?: string; onConfirm: (value: string) => void } | null>(null);
 
@@ -144,12 +261,12 @@ export default function ProjectDetailPage() {
   }
   interface ProjectSummary {
     todo: { total: number; todo: number; in_progress: number; done: number; progress_pct: number };
-    issues: { total: number; open: number; resolved: number };
+    issues: { total: number; open: number; resolved: number; critical: number };
     schedule: { total: number; planned: number; in_progress: number; done: number; overdue: number; upcoming_milestones: number };
     subtasks: { total: number; done: number; pending: number; cancelled: number };
   }
   const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [todoColumns] = useState(["todo", "in_progress", "done"]);
+  const [todoColumns] = useState(["todo", "in_progress", "done", "waiting", "archive"]);
   const [summary, setSummary] = useState<ProjectSummary | null>(null);
   const [addingInColumn, setAddingInColumn] = useState<string | null>(null);
   const [newTodoTitle, setNewTodoTitle] = useState("");
@@ -161,6 +278,8 @@ export default function ProjectDetailPage() {
   const [editTodoTitle, setEditTodoTitle] = useState("");
   const [editTodoDesc, setEditTodoDesc] = useState("");
   const [editTodoPriority, setEditTodoPriority] = useState<"low" | "medium" | "high">("medium");
+  const [editTodoAssignee, setEditTodoAssignee] = useState("");
+  const [editTodoDueDate, setEditTodoDueDate] = useState("");
   const [draggedTodo, setDraggedTodo] = useState<string | null>(null);
 
   const loadSummary = async () => {
@@ -182,13 +301,18 @@ export default function ProjectDetailPage() {
     } catch {}
   };
 
+  const todoCreatingRef = useRef(false);
   const createTodo = async (column: string) => {
-    if (!newTodoTitle.trim()) return;
+    if (!newTodoTitle.trim() || todoCreatingRef.current) return;
+    todoCreatingRef.current = true;
+    const title = newTodoTitle.trim();
+    setNewTodoTitle("");
+    setAddingInColumn(null);
     try {
       await apiFetch(`/api/projects/${encodeURIComponent(name)}/todos`, {
         method: "POST",
         body: JSON.stringify({
-          title: newTodoTitle.trim(),
+          title,
           description: newTodoDesc.trim(),
           column,
           priority: newTodoPriority,
@@ -196,15 +320,15 @@ export default function ProjectDetailPage() {
           due_date: newTodoDueDate,
         }),
       });
-      setNewTodoTitle("");
       setNewTodoDesc("");
       setNewTodoPriority("medium");
       setNewTodoAssignee("");
       setNewTodoDueDate("");
-      setAddingInColumn(null);
       loadTodos();
     } catch {
       toast.error(t("toast.failedToCreate"));
+    } finally {
+      todoCreatingRef.current = false;
     }
   };
 
@@ -216,9 +340,23 @@ export default function ProjectDetailPage() {
           title: editTodoTitle.trim(),
           description: editTodoDesc.trim(),
           priority: editTodoPriority,
+          assignee: editTodoAssignee.trim(),
+          due_date: editTodoDueDate,
         }),
       });
       setEditingTodo(null);
+      loadTodos();
+    } catch {
+      toast.error(t("toast.failedToSave"));
+    }
+  };
+
+  const toggleStar = async (todoId: string, starred: boolean) => {
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/todos/${todoId}`, {
+        method: "PUT",
+        body: JSON.stringify({ starred }),
+      });
       loadTodos();
     } catch {
       toast.error(t("toast.failedToSave"));
@@ -279,6 +417,8 @@ export default function ProjectDetailPage() {
     if (col === "todo") return t("todo.todo");
     if (col === "in_progress") return t("todo.inProgress");
     if (col === "done") return t("todo.done");
+    if (col === "waiting") return t("todo.waiting");
+    if (col === "archive") return t("todo.archive");
     return col;
   };
 
@@ -385,6 +525,7 @@ export default function ProjectDetailPage() {
   const [editSchedCategory, setEditSchedCategory] = useState("");
   const [editSchedParent, setEditSchedParent] = useState("");
   const [editSchedDepends, setEditSchedDepends] = useState<string[]>([]);
+  const [editSchedProgress, setEditSchedProgress] = useState(0);
   // Category state
   const [categories, setCategories] = useState<ScheduleCategory[]>([]);
   const [showNewCategory, setShowNewCategory] = useState(false);
@@ -462,6 +603,7 @@ export default function ProjectDetailPage() {
 
   const updateScheduleTask = async (taskId: string, updates: Partial<ScheduleTask>) => {
     try {
+      if (updates.status === "done") updates.progress_pct = 100;
       await apiFetch(`/api/projects/${encodeURIComponent(name)}/schedule/tasks/${taskId}`, {
         method: "PUT",
         body: JSON.stringify(updates),
@@ -549,6 +691,7 @@ export default function ProjectDetailPage() {
           category: editSchedCategory,
           parent_id: editSchedParent,
           depends_on: editSchedDepends,
+          progress_pct: editSchedStatus === "done" ? 100 : editSchedProgress,
         }),
       });
       setEditingSchedId(null);
@@ -570,6 +713,7 @@ export default function ProjectDetailPage() {
     setEditSchedCategory(task.category || "");
     setEditSchedParent(task.parent_id);
     setEditSchedDepends([...task.depends_on]);
+    setEditSchedProgress(task.progress_pct);
   };
 
   // Check if task has unfinished dependencies
@@ -829,7 +973,8 @@ export default function ProjectDetailPage() {
   }, [scheduleView]);
 
   const loadDocs = async (path: string = docPath) => {
-    const q = path ? `?subpath=${encodeURIComponent(path)}` : "";
+    const fullPath = getApiDocPath(path);
+    const q = fullPath ? `?subpath=${encodeURIComponent(fullPath)}` : "";
     try {
       const res = await apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs${q}`);
       setDocs(res.docs || []);
@@ -861,7 +1006,6 @@ export default function ProjectDetailPage() {
     if (doc && (doc as any).is_folder) {
       const newPath = docPath ? `${docPath}/${filename}` : filename;
       setDocPath(newPath);
-      setSelectedDoc(null);
       setShowNewDoc(false);
       setShowNewDocFolder(false);
       loadDocs(newPath);
@@ -869,18 +1013,122 @@ export default function ProjectDetailPage() {
     }
     // File click
     const filePath = docPath ? `${docPath}/${filename}` : filename;
+    const apiFilePath = getApiDocPath(filePath);
     setSelectedDoc(filename);
     setIsEditing(false);
     setShowNewDoc(false);
     setShowNewDocFolder(false);
+    // Clean up previous blob URL
+    if (docBlobUrl) { URL.revokeObjectURL(docBlobUrl); setDocBlobUrl(null); }
+    setDocHtml(null);
+    setDocContent("");
+
+    const ext = filename.split(".").pop()?.toLowerCase() || "";
+    const apiPath = `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(apiFilePath)}`;
+    const videoExts = ["mp4","webm","mov","avi","mkv","m4v","flv","wmv","3gp","ogv","ts"];
+    const audioExts = ["mp3","wav","ogg","m4a","aac","flac","wma","opus","aiff","mid","midi","weba"];
+    const imageExts = ["png","jpg","jpeg","gif","webp","bmp","ico","tiff"];
+
     try {
-      const data = await apiFetch<{ content: string }>(
-        `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(filePath)}`
-      );
-      setDocContent(data.content);
+      if (ext === "pdf") {
+        const buf = await apiFetchBlob(apiPath);
+        const blob = new Blob([buf], { type: "application/pdf" });
+        setDocBlobUrl(URL.createObjectURL(blob));
+      } else if (ext === "docx") {
+        const mammoth = (await import("mammoth")).default;
+        const buf = await apiFetchBlob(apiPath);
+        const result = await mammoth.convertToHtml({ arrayBuffer: buf });
+        setDocHtml(result.value);
+      } else if (ext === "html" || ext === "htm") {
+        const data = await apiFetch<{ content: string }>(apiPath);
+        const blob = new Blob([data.content], { type: "text/html;charset=utf-8" });
+        setDocBlobUrl(URL.createObjectURL(blob));
+      } else if (videoExts.includes(ext) || audioExts.includes(ext) || imageExts.includes(ext)) {
+        const buf = await apiFetchBlob(apiPath);
+        const mimeMap: Record<string,string> = {
+          mp4:"video/mp4",webm:"video/webm",mov:"video/quicktime",avi:"video/x-msvideo",mkv:"video/x-matroska",m4v:"video/x-m4v",flv:"video/x-flv",wmv:"video/x-ms-wmv","3gp":"video/3gpp",ogv:"video/ogg",ts:"video/mp2t",
+          mp3:"audio/mpeg",wav:"audio/wav",ogg:"audio/ogg",m4a:"audio/mp4",aac:"audio/aac",flac:"audio/flac",wma:"audio/x-ms-wma",opus:"audio/opus",aiff:"audio/aiff",mid:"audio/midi",midi:"audio/midi",weba:"audio/webm",
+          png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",gif:"image/gif",webp:"image/webp",bmp:"image/bmp",ico:"image/x-icon",tiff:"image/tiff",
+        };
+        const blob = new Blob([buf], { type: mimeMap[ext] || "application/octet-stream" });
+        setDocBlobUrl(URL.createObjectURL(blob));
+      } else {
+        const data = await apiFetch<{ content: string }>(apiPath);
+        setDocContent(data.content);
+      }
     } catch {
       toast.error(t("toast.failedToLoadDocument"));
     }
+  };
+
+  const openMovePanel = async () => {
+    setShowMovePanel(true);
+    setMoveSelectedFolder("");
+    setMoveExpandedFolders(new Set());
+    setLoadingMoveFolders(true);
+    try {
+      const res = await apiFetch<{ folders: string[] }>(`/api/projects/${encodeURIComponent(name)}/docs-tree`);
+      setMoveFolders(res.folders || [""]);
+    } catch { setMoveFolders([""]); }
+    finally { setLoadingMoveFolders(false); }
+  };
+
+  const moveSelectedDocs = async () => {
+    if (docSelected.size === 0) return;
+    setMovingDocs(true);
+    const files = Array.from(docSelected).map((f) => docPath ? `${docPath}/${f}` : f);
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/docs-move`, {
+        method: "POST",
+        body: JSON.stringify({ files, dest_folder: moveSelectedFolder }),
+      });
+      toast.success(`Moved ${docSelected.size} item(s)`);
+      setShowMovePanel(false);
+      setDocSelected(new Set());
+      setDocSelectMode(false);
+      if (selectedDoc && docSelected.has(selectedDoc)) { setSelectedDoc(null); setDocContent(""); setDocBlobUrl(null); setDocHtml(null); }
+      loadDocs(docPath);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to move");
+    } finally { setMovingDocs(false); }
+  };
+
+  const buildMoveFolderTree = (flatFolders: string[]) => {
+    const childrenMap: Record<string, string[]> = {};
+    for (const f of flatFolders) {
+      if (f === "") continue;
+      const parts = f.split("/");
+      const parent = parts.length === 1 ? "" : parts.slice(0, -1).join("/");
+      if (!childrenMap[parent]) childrenMap[parent] = [];
+      childrenMap[parent].push(f);
+    }
+    return childrenMap;
+  };
+
+  const toggleMoveFolder = (folder: string) => {
+    setMoveExpandedFolders((prev) => {
+      const next = new Set(prev);
+      next.has(folder) ? next.delete(folder) : next.add(folder);
+      return next;
+    });
+  };
+
+  const renameDoc = async (oldName: string, newName: string) => {
+    if (!newName.trim() || newName === oldName) { setRenamingDoc(null); return; }
+    const isFolder = docs.find((d) => d.filename === oldName && (d as any).is_folder);
+    const oldPath = getApiDocPath(docPath ? `${docPath}/${oldName}` : oldName);
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(oldPath)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ new_name: newName.trim() }),
+      });
+      setDocs((prev) => prev.map((d) => d.filename === oldName ? { ...d, filename: newName.trim() } : d));
+      if (selectedDoc === oldName) setSelectedDoc(newName.trim());
+      toast.success(`Renamed to ${newName.trim()}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to rename");
+    }
+    setRenamingDoc(null);
   };
 
   const saveDoc = async () => {
@@ -888,7 +1136,7 @@ export default function ProjectDetailPage() {
     setSaving(true);
     try {
       await apiFetch(
-        `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${selectedDoc}` : selectedDoc)}`,
+        `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(docPath ? `${docPath}/${selectedDoc}` : selectedDoc))}`,
         {
           method: "PUT",
           body: JSON.stringify({ content: editContent }),
@@ -917,6 +1165,7 @@ export default function ProjectDetailPage() {
         협업: project.metadata?.["협업"] || "",
         주도: project.metadata?.["주도"] || "",
         오너: project.metadata?.["오너"] || "Chad",
+        연관프로젝트: project.metadata?.["연관프로젝트"] || "",
         목표종료일: project.metadata?.["목표종료일"] || "",
         실제종료일: project.metadata?.["실제종료일"] || "",
         related_people: project.metadata?.related_people || "Chad (Chungil Chae)",
@@ -1047,8 +1296,7 @@ export default function ProjectDetailPage() {
   const handleSubtaskDragEnd = async () => {
     if (!dragSubtaskId) return;
     setDragSubtaskId(null);
-    // Persist new order
-    const orderedIds = subtasks.map((s) => s.id);
+    const orderedIds = subtasksRef.current.map((s) => s.id);
     try {
       await apiFetch(
         `/api/projects/${encodeURIComponent(name)}/subtasks/reorder`,
@@ -1058,7 +1306,6 @@ export default function ProjectDetailPage() {
         }
       );
     } catch {
-      // Reload on error
       loadSubtasks();
     }
   };
@@ -1129,12 +1376,31 @@ export default function ProjectDetailPage() {
     );
   }
 
+  const getExt = (name: string) => { const i = name.lastIndexOf("."); return i > 0 ? name.slice(i + 1).toLowerCase() : ""; };
+  const sortedDocs = [...docs].sort((a, b) => {
+    const aFolder = (a as any).is_folder ? 1 : 0;
+    const bFolder = (b as any).is_folder ? 1 : 0;
+    if (aFolder !== bFolder) return bFolder - aFolder; // folders first
+    const dir = docSortDir === "asc" ? 1 : -1;
+    if (docSortKey === "type") {
+      const aExt = aFolder ? "" : getExt(a.filename);
+      const bExt = bFolder ? "" : getExt(b.filename);
+      const cmp = aExt.localeCompare(bExt);
+      return cmp !== 0 ? cmp * dir : a.filename.localeCompare(b.filename) * dir;
+    }
+    return a.filename.localeCompare(b.filename) * dir;
+  });
+  const toggleDocSort = (key: "name" | "type") => {
+    if (docSortKey === key) setDocSortDir(docSortDir === "asc" ? "desc" : "asc");
+    else { setDocSortKey(key); setDocSortDir("asc"); }
+  };
+
   const stage = getStageByFolder(project.stage);
 
   return (
-    <div className="space-y-6">
+    <div className={docFullscreen ? "fixed inset-0 z-50 bg-neutral-50 dark:bg-neutral-950 p-4 flex flex-col" : "space-y-6"}>
       {/* Project Header */}
-      <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5">
+      <div className={`bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5 ${docFullscreen ? "hidden" : ""}`}>
         <div className="flex items-start justify-between">
           <div className="flex-1">
             {/* Back + Display Name */}
@@ -1260,6 +1526,25 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
+          {/* Progress widget (before action buttons) */}
+          {summary && summary.subtasks.total > 0 && (() => {
+            const pct = Math.round(summary.subtasks.done / summary.subtasks.total * 100);
+            return (
+              <div className="flex-1 min-w-[120px] ml-1">
+                <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 text-center h-full flex flex-col justify-center">
+                  <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2 text-left">{t("subtask.progress")} {summary.subtasks.done}/{summary.subtasks.total}</p>
+                  <div className="h-3 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-yellow-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs text-neutral-400 mt-2">
+                    <span>{pct}%</span>
+                    <span>{summary.subtasks.pending} left</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Action buttons */}
           <div className="flex items-center gap-1 mb-2 ml-4">
             <button
@@ -1319,9 +1604,9 @@ export default function ProjectDetailPage() {
               {/* Issues summary */}
               <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 min-w-[120px] text-center">
                 <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">{t("issues.title")}</p>
-                <p className="text-lg font-bold text-neutral-900 dark:text-white">{summary.issues.open}/{summary.issues.total}</p>
+                <p className={`text-lg font-bold ${summary.issues.critical > 0 ? "text-red-600 dark:text-red-400" : "text-neutral-900 dark:text-white"}`}>{summary.issues.open}/{summary.issues.total}</p>
                 <div className="flex justify-between text-xs text-neutral-400 mt-1">
-                  <span>{summary.issues.open} open</span>
+                  <span>{summary.issues.critical > 0 ? <span className="text-red-500 font-medium">{summary.issues.critical} critical</span> : `${summary.issues.open} open`}</span>
                   <span>{summary.issues.resolved} done</span>
                 </div>
               </div>
@@ -1344,9 +1629,9 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-neutral-200 dark:border-neutral-800">
+      <div className={`border-b border-neutral-200 dark:border-neutral-800 ${docFullscreen ? "hidden" : ""}`}>
         <nav className="flex gap-4">
-          {(["settings", "documents", "todo", "issues", "schedule", "instructions"] as const).map((tab) => (
+          {(["settings", "documents", "notes", "todo", "schedule", "issues", "instructions", "terminal"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1363,10 +1648,10 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === "documents" && (
-        <div className="flex gap-4 h-[calc(100vh-18rem)]">
+      {(activeTab === "documents" || activeTab === "notes") && (
+        <div className={docFullscreen ? "flex gap-4 flex-1 min-h-0" : "flex gap-4 h-[calc(100vh-22rem)]"}>
           {/* File List */}
-          <div className="w-72 flex-shrink-0 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col overflow-hidden">
+          <div className={`w-72 flex-shrink-0 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 flex flex-col overflow-hidden ${docFullscreen ? "hidden" : ""}`}>
             {/* Path bar */}
             {docPath && (
               <button
@@ -1375,7 +1660,6 @@ export default function ProjectDetailPage() {
                   parts.pop();
                   const parent = parts.join("/");
                   setDocPath(parent);
-                  setSelectedDoc(null);
                   loadDocs(parent);
                 }}
                 className="flex items-center gap-1 px-3 py-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 border-b border-neutral-100 dark:border-neutral-800 w-full"
@@ -1417,26 +1701,34 @@ export default function ProjectDetailPage() {
                 <CheckSquare className="w-3.5 h-3.5" /> Select
               </button>
               {docSelectMode && docSelected.size > 0 && (
-                <button
-                  onClick={() => {
-                    setConfirmDialog({
-                      message: `Delete ${docSelected.size} file(s)?`,
-                      onConfirm: async () => {
-                        setConfirmDialog(null);
-                        for (const f of docSelected) {
-                          try { await apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${f}` : f)}`, { method: "DELETE" }); } catch {}
-                        }
-                        setDocs((prev) => prev.filter((d) => !docSelected.has(d.filename)));
-                        if (selectedDoc && docSelected.has(selectedDoc)) { setSelectedDoc(null); setDocContent(""); }
-                        toast.success(`Deleted ${docSelected.size} file(s)`);
-                        setDocSelected(new Set()); setDocSelectMode(false);
-                      },
-                    });
-                  }}
-                  className="flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:text-red-400 rounded ml-auto"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> ({docSelected.size})
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      setConfirmDialog({
+                        message: `Delete ${docSelected.size} file(s)?`,
+                        onConfirm: async () => {
+                          setConfirmDialog(null);
+                          for (const f of docSelected) {
+                            try { await apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(docPath ? `${docPath}/${f}` : f))}`, { method: "DELETE" }); } catch {}
+                          }
+                          setDocs((prev) => prev.filter((d) => !docSelected.has(d.filename)));
+                          if (selectedDoc && docSelected.has(selectedDoc)) { setSelectedDoc(null); setDocContent(""); setDocBlobUrl(null); setDocHtml(null); }
+                          toast.success(`Deleted ${docSelected.size} file(s)`);
+                          setDocSelected(new Set()); setDocSelectMode(false);
+                        },
+                      });
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:text-red-400 rounded"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> ({docSelected.size})
+                  </button>
+                  <button
+                    onClick={openMovePanel}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/30 rounded"
+                  >
+                    <FolderSymlink className="w-3.5 h-3.5" /> Move
+                  </button>
+                </>
               )}
               {docSelectMode && (
                 <button
@@ -1448,9 +1740,52 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
+            {/* Move panel */}
+            {showMovePanel && (
+              <div className="p-2 border-b border-neutral-200 dark:border-neutral-700 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-indigo-700 dark:text-indigo-300">Move {docSelected.size} item(s) to:</span>
+                  <button onClick={() => setShowMovePanel(false)} className="p-0.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700">
+                    <X className="w-3.5 h-3.5 text-neutral-500" />
+                  </button>
+                </div>
+                {loadingMoveFolders ? (
+                  <div className="flex items-center gap-1.5 text-xs text-neutral-400"><Loader2 className="w-3 h-3 animate-spin" /> Loading...</div>
+                ) : (
+                  <MoveFolderTree
+                    folders={moveFolders}
+                    selectedFolder={moveSelectedFolder}
+                    expandedFolders={moveExpandedFolders}
+                    onSelect={setMoveSelectedFolder}
+                    onToggle={toggleMoveFolder}
+                  />
+                )}
+                <div className="flex justify-end">
+                  <button
+                    onClick={moveSelectedDocs}
+                    disabled={movingDocs}
+                    className="px-2.5 py-1 bg-indigo-500 text-white rounded text-xs hover:bg-indigo-600 disabled:opacity-40 flex items-center gap-1"
+                  >
+                    {movingDocs ? <Loader2 className="w-3 h-3 animate-spin" /> : <FolderSymlink className="w-3 h-3" />}
+                    Move
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Sort header */}
+            <div className="flex items-center border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 text-xs text-neutral-500 dark:text-neutral-400">
+              <button onClick={() => toggleDocSort("name")} className="flex-1 flex items-center gap-1 px-3 py-1.5 hover:text-neutral-700 dark:hover:text-neutral-200">
+                Name {docSortKey === "name" ? (docSortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+              </button>
+              <button onClick={() => toggleDocSort("type")} className="w-16 flex items-center gap-1 px-2 py-1.5 hover:text-neutral-700 dark:hover:text-neutral-200">
+                Type {docSortKey === "type" ? (docSortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+              </button>
+            </div>
+
             {/* File list */}
             <div className="flex-1 overflow-y-auto divide-y divide-neutral-100 dark:divide-neutral-800">
-              {docs.map((doc) => (
+              {sortedDocs.map((doc) => (
                 <div key={doc.filename} className={`flex items-center group ${selectedDoc === doc.filename ? "bg-indigo-50 dark:bg-indigo-950" : "hover:bg-neutral-50 dark:hover:bg-neutral-800"}`}>
                   {docSelectMode && (
                     <button onClick={() => setDocSelected((prev) => { const n = new Set(prev); n.has(doc.filename) ? n.delete(doc.filename) : n.add(doc.filename); return n; })} className="pl-3 pr-1 py-2">
@@ -1461,10 +1796,42 @@ export default function ProjectDetailPage() {
                     onClick={() => { if (docSelectMode) { setDocSelected((prev) => { const n = new Set(prev); n.has(doc.filename) ? n.delete(doc.filename) : n.add(doc.filename); return n; }); } else { loadDoc(doc.filename); setShowNewDoc(false); } }}
                     className={`flex-1 text-left px-3 py-2 text-sm flex items-center gap-2 ${selectedDoc === doc.filename ? "text-indigo-700 dark:text-indigo-300" : "text-neutral-700 dark:text-neutral-300"}`}
                   >
-                    {(doc as any).is_folder ? <Folder className="w-4 h-4 flex-shrink-0 text-amber-500" /> : <FileText className="w-4 h-4 flex-shrink-0" />}
-                    <span className="truncate">{doc.filename}</span>
+                    {(() => {
+                      const e = doc.filename.split(".").pop()?.toLowerCase() || "";
+                      if ((doc as any).is_folder) return <Folder className="w-4 h-4 flex-shrink-0 text-amber-500" />;
+                      if (e === "pdf") return <FileText className="w-4 h-4 flex-shrink-0 text-red-500" />;
+                      if (e === "docx") return <FileText className="w-4 h-4 flex-shrink-0 text-blue-500" />;
+                      if (e === "csv") return <FileText className="w-4 h-4 flex-shrink-0 text-green-500" />;
+                      if (["mp4","webm","mov","avi","mkv","m4v","flv","wmv","3gp","ogv","ts"].includes(e)) return <FileText className="w-4 h-4 flex-shrink-0 text-purple-500" />;
+                      if (["mp3","wav","ogg","m4a","aac","flac","wma","opus","aiff","mid","midi","weba"].includes(e)) return <FileText className="w-4 h-4 flex-shrink-0 text-pink-500" />;
+                      if (["png","jpg","jpeg","gif","webp","bmp","ico","tiff"].includes(e)) return <FileText className="w-4 h-4 flex-shrink-0 text-cyan-500" />;
+                      return <FileText className="w-4 h-4 flex-shrink-0" />;
+                    })()}
+                    {renamingDoc === doc.filename ? (
+                      <input
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={() => renameDoc(doc.filename, renameValue)}
+                        onKeyDown={(e) => { if (e.key === "Enter") renameDoc(doc.filename, renameValue); if (e.key === "Escape") setRenamingDoc(null); }}
+                        className="flex-1 px-1 py-0.5 text-sm bg-white dark:bg-neutral-800 border border-indigo-400 rounded outline-none"
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <span className="truncate flex-1">{doc.filename}</span>
+                    )}
+                    <span className="w-12 text-xs text-neutral-400 text-right flex-shrink-0">{(doc as any).is_folder ? "folder" : getExt(doc.filename) || "file"}</span>
                   </button>
                   {!docSelectMode && (
+                    <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setRenamingDoc(doc.filename); setRenameValue(doc.filename); }}
+                      className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Rename"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={() => {
                         const isFolder = (doc as any).is_folder;
@@ -1473,12 +1840,12 @@ export default function ProjectDetailPage() {
                           message: msg,
                           onConfirm: () => {
                             setConfirmDialog(null);
-                            const path = docPath ? `${docPath}/${doc.filename}` : doc.filename;
+                            const path = getApiDocPath(docPath ? `${docPath}/${doc.filename}` : doc.filename);
                             const url = isFolder
                               ? `/api/projects/${encodeURIComponent(name)}/folders/${encodeURIComponent(path)}`
                               : `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(path)}`;
                             apiFetch(url, { method: "DELETE" })
-                              .then(() => { setDocs((p) => p.filter((d) => d.filename !== doc.filename)); if (selectedDoc === doc.filename) { setSelectedDoc(null); setDocContent(""); } toast.success("Deleted"); })
+                              .then(() => { setDocs((p) => p.filter((d) => d.filename !== doc.filename)); if (selectedDoc === doc.filename) { setSelectedDoc(null); setDocContent(""); setDocBlobUrl(null); setDocHtml(null); } toast.success("Deleted"); })
                               .catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
                           },
                         });
@@ -1487,6 +1854,7 @@ export default function ProjectDetailPage() {
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
+                    </>
                   )}
                 </div>
               ))}
@@ -1506,8 +1874,8 @@ export default function ProjectDetailPage() {
                   <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">New Folder</h3>
                   <input type="text" value={newDocFolderName} onChange={(e) => setNewDocFolderName(e.target.value)} placeholder="folder-name" className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500" autoFocus onKeyDown={(e) => {
                     if (e.key === "Enter" && newDocFolderName.trim()) {
-                      apiFetch(`/api/projects/${encodeURIComponent(name)}/folders`, { method: "POST", body: JSON.stringify({ folder_name: docPath ? `${docPath}/${newDocFolderName.trim()}` : newDocFolderName.trim() }) })
-                        .then(async () => { const res = await apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs${docPath ? `?subpath=${encodeURIComponent(docPath)}` : ""}`); setDocs(res.docs || []); setShowNewDocFolder(false); setNewDocFolderName(""); toast.success("Folder created"); })
+                      apiFetch(`/api/projects/${encodeURIComponent(name)}/folders`, { method: "POST", body: JSON.stringify({ folder_name: getApiDocPath(docPath ? `${docPath}/${newDocFolderName.trim()}` : newDocFolderName.trim()) }) })
+                        .then(async () => { const res = await apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs${getApiDocPath(docPath) ? `?subpath=${encodeURIComponent(getApiDocPath(docPath))}` : ""}`); setDocs(res.docs || []); setShowNewDocFolder(false); setNewDocFolderName(""); toast.success("Folder created"); })
                         .catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
                     }
                     if (e.key === "Escape") setShowNewDocFolder(false);
@@ -1516,8 +1884,8 @@ export default function ProjectDetailPage() {
                     <button onClick={() => setShowNewDocFolder(false)} className="px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 rounded-lg">Cancel</button>
                     <button onClick={() => {
                       if (!newDocFolderName.trim()) return;
-                      apiFetch(`/api/projects/${encodeURIComponent(name)}/folders`, { method: "POST", body: JSON.stringify({ folder_name: docPath ? `${docPath}/${newDocFolderName.trim()}` : newDocFolderName.trim() }) })
-                        .then(async () => { const res = await apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs${docPath ? `?subpath=${encodeURIComponent(docPath)}` : ""}`); setDocs(res.docs || []); setShowNewDocFolder(false); setNewDocFolderName(""); toast.success("Folder created"); })
+                      apiFetch(`/api/projects/${encodeURIComponent(name)}/folders`, { method: "POST", body: JSON.stringify({ folder_name: getApiDocPath(docPath ? `${docPath}/${newDocFolderName.trim()}` : newDocFolderName.trim()) }) })
+                        .then(async () => { const res = await apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs${getApiDocPath(docPath) ? `?subpath=${encodeURIComponent(getApiDocPath(docPath))}` : ""}`); setDocs(res.docs || []); setShowNewDocFolder(false); setNewDocFolderName(""); toast.success("Folder created"); })
                         .catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
                     }} disabled={!newDocFolderName.trim()} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-40">
                       <Folder className="w-4 h-4" /> Create
@@ -1532,9 +1900,9 @@ export default function ProjectDetailPage() {
                   <button onClick={() => setShowNewDoc(false)} className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500"><X className="w-4 h-4" /></button>
                 </div>
                 <div className="p-3 border-b border-neutral-100 dark:border-neutral-800">
-                  <input type="text" value={newDocName} onChange={(e) => setNewDocName(e.target.value)} placeholder="filename.md" className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" autoFocus onKeyDown={(e) => { if (e.key === "Enter" && newDocName.trim()) { const fn = newDocName.endsWith(".md") ? newDocName : `${newDocName}.md`; setCreatingDoc(true); apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${fn}` : fn)}`, { method: "PUT", body: JSON.stringify({ content: newDocContent || `# ${newDocName.replace(/\.md$/, "")}\n\n` }) }).then(async () => { const res = await apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs${docPath ? `?subpath=${encodeURIComponent(docPath)}` : ""}`); setDocs(res.docs || []); setShowNewDoc(false); setSelectedDoc(fn); setDocContent(newDocContent || `# ${newDocName.replace(/\.md$/, "")}\n\n`); setNewDocName(""); setNewDocContent(""); toast.success(`Created ${fn}`); }).catch(() => toast.error("Failed")).finally(() => setCreatingDoc(false)); } }} />
+                  <input type="text" value={newDocName} onChange={(e) => setNewDocName(e.target.value)} placeholder="filename.md" className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" autoFocus onKeyDown={(e) => { if (e.key === "Enter" && newDocName.trim()) { const fn = newDocName.endsWith(".md") ? newDocName : `${newDocName}.md`; setCreatingDoc(true); apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(docPath ? `${docPath}/${fn}` : fn))}`, { method: "PUT", body: JSON.stringify({ content: newDocContent || `# ${newDocName.replace(/\.md$/, "")}\n\n` }) }).then(async () => { const res = await apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs${getApiDocPath(docPath) ? `?subpath=${encodeURIComponent(getApiDocPath(docPath))}` : ""}`); setDocs(res.docs || []); setShowNewDoc(false); setSelectedDoc(fn); setDocContent(newDocContent || `# ${newDocName.replace(/\.md$/, "")}\n\n`); setNewDocName(""); setNewDocContent(""); toast.success(`Created ${fn}`); }).catch(() => toast.error("Failed")).finally(() => setCreatingDoc(false)); } }} />
                 </div>
-                <div className="flex-1 overflow-hidden" data-color-mode="dark">
+                <div className="flex-1 overflow-hidden" data-color-mode={colorMode}>
                   <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin text-neutral-400" /></div>}>
                     <MDEditor value={newDocContent} onChange={(v) => setNewDocContent(v || "")} height="100%" preview="edit" />
                   </Suspense>
@@ -1542,7 +1910,7 @@ export default function ProjectDetailPage() {
                 <div className="flex justify-end gap-2 px-4 py-2.5 border-t border-neutral-100 dark:border-neutral-800">
                   <button onClick={() => setShowNewDoc(false)} className="px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 rounded-lg">Cancel</button>
                   <button
-                    onClick={() => { const fn = newDocName.endsWith(".md") ? newDocName : `${newDocName}.md`; setCreatingDoc(true); apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${fn}` : fn)}`, { method: "PUT", body: JSON.stringify({ content: newDocContent || `# ${newDocName.replace(/\.md$/, "")}\n\n` }) }).then(async () => { const res = await apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs${docPath ? `?subpath=${encodeURIComponent(docPath)}` : ""}`); setDocs(res.docs || []); setShowNewDoc(false); setSelectedDoc(fn); setDocContent(newDocContent || `# ${newDocName.replace(/\.md$/, "")}\n\n`); setNewDocName(""); setNewDocContent(""); toast.success(`Created ${fn}`); }).catch(() => toast.error("Failed")).finally(() => setCreatingDoc(false)); }}
+                    onClick={() => { const fn = newDocName.endsWith(".md") ? newDocName : `${newDocName}.md`; setCreatingDoc(true); apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(docPath ? `${docPath}/${fn}` : fn))}`, { method: "PUT", body: JSON.stringify({ content: newDocContent || `# ${newDocName.replace(/\.md$/, "")}\n\n` }) }).then(async () => { const res = await apiFetch<{ docs: FileItem[] }>(`/api/projects/${encodeURIComponent(name)}/docs${getApiDocPath(docPath) ? `?subpath=${encodeURIComponent(getApiDocPath(docPath))}` : ""}`); setDocs(res.docs || []); setShowNewDoc(false); setSelectedDoc(fn); setDocContent(newDocContent || `# ${newDocName.replace(/\.md$/, "")}\n\n`); setNewDocName(""); setNewDocContent(""); toast.success(`Created ${fn}`); }).catch(() => toast.error("Failed")).finally(() => setCreatingDoc(false)); }}
                     disabled={creatingDoc || !newDocName.trim()}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-40"
                   >
@@ -1564,24 +1932,52 @@ export default function ProjectDetailPage() {
                       </>
                     ) : (
                       <>
-                        <button onClick={() => { setEditContent(docContent); setIsEditing(true); }} className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500" title="Edit"><Edit3 className="w-4 h-4" /></button>
+                        {(() => {
+                          const binaryExts = ["pdf","docx","mp4","webm","mov","avi","mkv","m4v","flv","wmv","3gp","ogv","ts","mp3","wav","ogg","m4a","aac","flac","wma","opus","aiff","mid","midi","weba","png","jpg","jpeg","gif","webp","bmp","ico","tiff"];
+                          const ext = selectedDoc.split(".").pop()?.toLowerCase() || "";
+                          return binaryExts.includes(ext) ? null : (
+                            <button onClick={() => { setEditContent(docContent); setIsEditing(true); }} className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500" title="Edit"><Edit3 className="w-4 h-4" /></button>
+                          );
+                        })()}
+                        {(() => {
+                          const binaryExts = ["pdf","docx","mp4","webm","mov","avi","mkv","m4v","flv","wmv","3gp","ogv","ts","mp3","wav","ogg","m4a","aac","flac","wma","opus","aiff","mid","midi","weba","png","jpg","jpeg","gif","webp","bmp","ico","tiff"];
+                          const ext = selectedDoc.split(".").pop()?.toLowerCase() || "";
+                          return binaryExts.includes(ext);
+                        })() ? (
+                          <a
+                            href={`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(docPath ? `${docPath}/${selectedDoc}` : selectedDoc))}`}
+                            download={selectedDoc}
+                            className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500"
+                            title="Download"
+                          >
+                            <Download className="w-4 h-4" />
+                          </a>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const printWin = window.open("", "_blank");
+                              if (!printWin) return;
+                              const contentEl = document.querySelector("[data-color-mode] .wmde-markdown") as HTMLElement;
+                              const rawContent = contentEl?.innerHTML || `<pre style="white-space:pre-wrap;font-family:monospace;">${docContent.replace(/</g,"&lt;")}</pre>`;
+                              printWin.document.write(`<!DOCTYPE html><html><head><title>${selectedDoc}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a;line-height:1.6}h1,h2,h3{margin-top:1.5em}pre{background:#f5f5f5;padding:12px;border-radius:6px;overflow-x:auto}code{background:#f5f5f5;padding:2px 4px;border-radius:3px;font-size:0.9em}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}img{max-width:100%}@media print{body{margin:0}}</style></head><body>${rawContent}</body></html>`);
+                              printWin.document.close();
+                              setTimeout(() => { printWin.print(); }, 300);
+                            }}
+                            className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500"
+                            title="Print / Save as PDF"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
-                          onClick={() => {
-                            const printWin = window.open("", "_blank");
-                            if (!printWin) return;
-                            const contentEl = document.querySelector("[data-color-mode] .wmde-markdown") as HTMLElement;
-                            const rawContent = contentEl?.innerHTML || `<pre style="white-space:pre-wrap;font-family:monospace;">${docContent.replace(/</g,"&lt;")}</pre>`;
-                            printWin.document.write(`<!DOCTYPE html><html><head><title>${selectedDoc}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a;line-height:1.6}h1,h2,h3{margin-top:1.5em}pre{background:#f5f5f5;padding:12px;border-radius:6px;overflow-x:auto}code{background:#f5f5f5;padding:2px 4px;border-radius:3px;font-size:0.9em}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}img{max-width:100%}@media print{body{margin:0}}</style></head><body>${rawContent}</body></html>`);
-                            printWin.document.close();
-                            setTimeout(() => { printWin.print(); }, 300);
-                          }}
+                          onClick={() => setDocFullscreen(!docFullscreen)}
                           className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500"
-                          title="Print / Save as PDF"
+                          title={docFullscreen ? "Exit Fullscreen" : "Fullscreen"}
                         >
-                          <Printer className="w-4 h-4" />
+                          {docFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                         </button>
                         <button
-                          onClick={() => { setConfirmDialog({ message: `Delete "${selectedDoc}"?`, onConfirm: () => { setConfirmDialog(null); setDeletingDoc(true); apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(docPath ? `${docPath}/${selectedDoc}` : selectedDoc)}`, { method: "DELETE" }).then(() => { setDocs((p) => p.filter((d) => d.filename !== selectedDoc)); setSelectedDoc(null); setDocContent(""); toast.success("Deleted"); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed")).finally(() => setDeletingDoc(false)); } }); }}
+                          onClick={() => { setConfirmDialog({ message: `Delete "${selectedDoc}"?`, onConfirm: () => { setConfirmDialog(null); setDeletingDoc(true); apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(docPath ? `${docPath}/${selectedDoc}` : selectedDoc))}`, { method: "DELETE" }).then(() => { setDocs((p) => p.filter((d) => d.filename !== selectedDoc)); setSelectedDoc(null); setDocContent(""); setDocBlobUrl(null); setDocHtml(null); toast.success("Deleted"); }).catch((e) => toast.error(e instanceof Error ? e.message : "Failed")).finally(() => setDeletingDoc(false)); } }); }}
                           disabled={deletingDoc}
                           className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500" title="Delete"
                         >
@@ -1591,20 +1987,18 @@ export default function ProjectDetailPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto" data-color-mode="dark">
+                <div className="flex-1 overflow-auto" data-color-mode={colorMode}>
                   {isEditing ? (
                     <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
                       <MDEditor value={editContent} onChange={(v) => setEditContent(v || "")} height="100%" preview="live" />
                     </Suspense>
-                  ) : selectedDoc?.endsWith(".md") ? (
-                    <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
-                      <MarkdownPreview
-                        source={docContent}
-                        style={{ padding: "1rem", backgroundColor: "transparent" }}
-                      />
-                    </Suspense>
                   ) : (
-                    <pre className="p-4 text-sm font-mono text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words">{docContent}</pre>
+                    <DocumentViewer
+                      selectedDoc={selectedDoc!}
+                      docContent={docContent}
+                      docBlobUrl={docBlobUrl}
+                      docHtml={docHtml}
+                    />
                   )}
                 </div>
               </>
@@ -1678,265 +2072,111 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {activeTab === "todo" && (
-        <div className="flex gap-4 h-[calc(100vh-18rem)] overflow-x-auto">
-          {todoColumns.map((col) => {
-            const columnItems = todos
-              .filter((t) => t.column === col)
-              .sort((a, b) => a.order - b.order);
-            return (
-              <div
-                key={col}
-                className="flex-1 min-w-[280px] flex flex-col bg-neutral-50 dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden"
-                onDragOver={handleDragOver}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  handleDropOnColumn(col);
-                }}
-              >
-                {/* Column header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">
-                      {columnLabel(col)}
-                    </h3>
-                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
-                      {columnItems.length}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Column body */}
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                  {columnItems.map((todo, idx) => (
-                    <div
-                      key={todo.id}
-                      draggable
-                      onDragStart={() => handleDragStart(todo.id)}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleDropOnCard(col, idx);
-                      }}
-                      className={`bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3 cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow ${
-                        draggedTodo === todo.id ? "opacity-50" : ""
-                      }`}
-                    >
-                      {editingTodo === todo.id ? (
-                        /* Inline edit mode */
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            value={editTodoTitle}
-                            onChange={(e) => setEditTodoTitle(e.target.value)}
-                            className="w-full px-2 py-1 text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            autoFocus
-                          />
-                          <textarea
-                            value={editTodoDesc}
-                            onChange={(e) => setEditTodoDesc(e.target.value)}
-                            rows={2}
-                            className="w-full px-2 py-1 text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
-                            placeholder={t("todo.description")}
-                          />
-                          <select
-                            value={editTodoPriority}
-                            onChange={(e) => setEditTodoPriority(e.target.value as "low" | "medium" | "high")}
-                            className="w-full px-2 py-1 text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          >
-                            <option value="low">{t("todo.low")}</option>
-                            <option value="medium">{t("todo.medium")}</option>
-                            <option value="high">{t("todo.high")}</option>
-                          </select>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => updateTodo(todo.id)}
-                              className="flex-1 px-2 py-1 text-xs font-medium bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                            >
-                              {t("action.save")}
-                            </button>
-                            <button
-                              onClick={() => setEditingTodo(null)}
-                              className="flex-1 px-2 py-1 text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded hover:bg-neutral-300 dark:hover:bg-neutral-600"
-                            >
-                              {t("action.cancel")}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        /* Display mode */
-                        <>
-                          <div className="flex items-start justify-between gap-1">
-                            <div className="flex items-start gap-2 flex-1">
-                              <input
-                                type="checkbox"
-                                checked={todo.column === "done"}
-                                onChange={() => {
-                                  if (todo.column === "done") {
-                                    moveTodo(todo.id, "todo", 0);
-                                  } else {
-                                    const doneItems = todos.filter((t) => t.column === "done");
-                                    moveTodo(todo.id, "done", doneItems.length);
-                                  }
-                                }}
-                                className="mt-1 w-4 h-4 rounded border-neutral-300 text-green-600 focus:ring-green-500 flex-shrink-0 cursor-pointer"
-                              />
-                              <p className={`text-sm font-medium flex-1 ${todo.column === "done" ? "line-through text-neutral-400" : "text-neutral-900 dark:text-white"}`}>
-                                {todo.title}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-0.5 flex-shrink-0">
-                              <button
-                                onClick={() => {
-                                  setEditingTodo(todo.id);
-                                  setEditTodoTitle(todo.title);
-                                  setEditTodoDesc(todo.description);
-                                  setEditTodoPriority(todo.priority);
-                                }}
-                                className="p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 rounded"
-                                title={t("action.edit")}
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => deleteTodo(todo.id)}
-                                className="p-1 text-neutral-400 hover:text-red-500 rounded"
-                                title={t("action.delete")}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                          {todo.description && (
-                            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 line-clamp-2">
-                              {todo.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${priorityClasses(todo.priority)}`}>
-                              {priorityLabel(todo.priority)}
-                            </span>
-                            {todo.assignee && (
-                              <span className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center gap-0.5">
-                                <User className="w-3 h-3" />
-                                {todo.assignee}
-                              </span>
-                            )}
-                            {todo.due_date && (
-                              <span className="text-xs text-neutral-400 flex items-center gap-0.5">
-                                <Calendar className="w-3 h-3" />
-                                {todo.due_date}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400">
-                            <span>{todo.created_at}</span>
-                            {todo.completed_at && <span className="text-green-500">completed {todo.completed_at}</span>}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-
-                  {columnItems.length === 0 && addingInColumn !== col && (
-                    <p className="text-xs text-neutral-400 dark:text-neutral-500 text-center py-4">
-                      {t("todo.noTasks")}
-                    </p>
-                  )}
-                </div>
-
-                {/* Add task form or button */}
-                <div className="p-2 border-t border-neutral-200 dark:border-neutral-800">
-                  {addingInColumn === col ? (
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        value={newTodoTitle}
-                        onChange={(e) => setNewTodoTitle(e.target.value)}
-                        placeholder={t("todo.taskTitle")}
-                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            createTodo(col);
-                          }
-                          if (e.key === "Escape") setAddingInColumn(null);
-                        }}
-                      />
-                      <textarea
-                        value={newTodoDesc}
-                        onChange={(e) => setNewTodoDesc(e.target.value)}
-                        rows={2}
-                        placeholder={t("todo.description")}
-                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
-                      />
-                      <select
-                        value={newTodoPriority}
-                        onChange={(e) => setNewTodoPriority(e.target.value as "low" | "medium" | "high")}
-                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      >
-                        <option value="low">{t("todo.low")}</option>
-                        <option value="medium">{t("todo.medium")}</option>
-                        <option value="high">{t("todo.high")}</option>
-                      </select>
-                      <input
-                        type="text"
-                        value={newTodoAssignee}
-                        onChange={(e) => setNewTodoAssignee(e.target.value)}
-                        placeholder={t("todo.assignee")}
-                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                      <input
-                        type="date"
-                        value={newTodoDueDate}
-                        onChange={(e) => setNewTodoDueDate(e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => createTodo(col)}
-                          disabled={!newTodoTitle.trim()}
-                          className="flex-1 px-2 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                          {t("todo.addTask")}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setAddingInColumn(null);
-                            setNewTodoTitle("");
-                            setNewTodoDesc("");
-                            setNewTodoPriority("medium");
-                          }}
-                          className="px-2 py-1.5 text-xs font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded hover:bg-neutral-300 dark:hover:bg-neutral-600"
-                        >
-                          {t("action.cancel")}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setAddingInColumn(col);
-                        setNewTodoTitle("");
-                        setNewTodoDesc("");
-                        setNewTodoPriority("medium");
-                      }}
-                      className="w-full flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      {t("todo.addTask")}
-                    </button>
-                  )}
-                </div>
+      {/* Terminal tab — session persists across tab switches */}
+      {activeTab === "terminal" && !terminalMode && (
+        <div className="flex flex-col items-center justify-center h-[400px] gap-6">
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            {project?.path}
+          </p>
+          <div className="flex gap-4">
+            <button
+              onClick={() => setTerminalMode("shell")}
+              className="flex flex-col items-center gap-3 px-8 py-6 border-2 border-neutral-200 dark:border-neutral-700 rounded-xl hover:border-amber-400 dark:hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-all group"
+            >
+              <TerminalSquare className="w-10 h-10 text-neutral-400 group-hover:text-amber-500 transition-colors" />
+              <div className="text-center">
+                <p className="font-semibold text-sm">Terminal</p>
+                <p className="text-xs text-neutral-400 mt-1">bash/zsh shell</p>
               </div>
-            );
-          })}
+            </button>
+            <button
+              onClick={() => setTerminalMode("claude")}
+              className="flex flex-col items-center gap-3 px-8 py-6 border-2 border-neutral-200 dark:border-neutral-700 rounded-xl hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 transition-all group"
+            >
+              <Bot className="w-10 h-10 text-neutral-400 group-hover:text-indigo-500 transition-colors" />
+              <div className="text-center">
+                <p className="font-semibold text-sm">Claude Code</p>
+                <p className="text-xs text-neutral-400 mt-1">AI-assisted dev</p>
+              </div>
+            </button>
+          </div>
         </div>
+      )}
+      {terminalMode && project?.path && (
+        <div className={activeTab === "terminal" ? "overflow-hidden" : "hidden"}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-neutral-400">
+              {terminalMode === "claude" ? "Claude Code" : "Shell"} — {project.path}
+            </span>
+            <div className="flex-1" />
+            <button
+              onClick={() => { setTerminalSessionKey((k) => k + 1); }}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-neutral-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Restart
+            </button>
+            <button
+              onClick={() => { setTerminalMode(null); setTerminalSessionKey((k) => k + 1); }}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-neutral-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-colors"
+            >
+              <X className="w-3 h-3" />
+              End
+            </button>
+          </div>
+          <EmbeddedTerminal
+            key={terminalSessionKey}
+            projectPath={project.path}
+            command={terminalMode === "claude" ? "claude" : ""}
+            visible={activeTab === "terminal"}
+            onClose={() => { setTerminalMode(null); }}
+          />
+        </div>
+      )}
+
+      {activeTab === "todo" && (
+        <TodoBoard
+          todos={todos}
+          todoColumns={todoColumns}
+          addingInColumn={addingInColumn}
+          setAddingInColumn={setAddingInColumn}
+          newTodoTitle={newTodoTitle}
+          setNewTodoTitle={setNewTodoTitle}
+          newTodoDesc={newTodoDesc}
+          setNewTodoDesc={setNewTodoDesc}
+          newTodoPriority={newTodoPriority}
+          setNewTodoPriority={setNewTodoPriority}
+          newTodoAssignee={newTodoAssignee}
+          setNewTodoAssignee={setNewTodoAssignee}
+          newTodoDueDate={newTodoDueDate}
+          setNewTodoDueDate={setNewTodoDueDate}
+          editingTodo={editingTodo}
+          setEditingTodo={setEditingTodo}
+          editTodoTitle={editTodoTitle}
+          setEditTodoTitle={setEditTodoTitle}
+          editTodoDesc={editTodoDesc}
+          setEditTodoDesc={setEditTodoDesc}
+          editTodoPriority={editTodoPriority}
+          setEditTodoPriority={setEditTodoPriority}
+          editTodoAssignee={editTodoAssignee}
+          setEditTodoAssignee={setEditTodoAssignee}
+          editTodoDueDate={editTodoDueDate}
+          setEditTodoDueDate={setEditTodoDueDate}
+          draggedTodo={draggedTodo}
+          createTodo={createTodo}
+          updateTodo={updateTodo}
+          deleteTodo={deleteTodo}
+          moveTodo={moveTodo}
+          handleDragStart={handleDragStart}
+          handleDragOver={handleDragOver}
+          handleDropOnColumn={handleDropOnColumn}
+          handleDropOnCard={handleDropOnCard}
+          toggleStar={toggleStar}
+          columnLabel={columnLabel}
+          priorityClasses={priorityClasses}
+          priorityLabel={priorityLabel}
+          t={t}
+        />
       )}
 
       {activeTab === "issues" && (
@@ -2610,6 +2850,26 @@ export default function ProjectDetailPage() {
                   <option value="in_progress">{t("schedule.inProgress")}</option>
                   <option value="done">{t("schedule.done")}</option>
                 </select>
+                {/* Progress */}
+                <div className="flex items-center gap-2 px-3 py-2 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800">
+                  <span className="text-xs text-neutral-500">Progress</span>
+                  <div className="flex gap-0.5">
+                    {[25, 50, 75, 100].map((step) => (
+                      <button
+                        key={step}
+                        type="button"
+                        onClick={() => setEditSchedProgress(editSchedProgress >= step ? step - 25 : step)}
+                        className={`w-5 h-5 rounded-sm transition-colors ${
+                          editSchedProgress >= step
+                            ? "bg-green-500 hover:bg-green-600"
+                            : "bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+                        }`}
+                        title={`${step}%`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{editSchedProgress}%</span>
+                </div>
               </div>
               {/* New category inline form */}
               {showNewCategory && (
@@ -2822,20 +3082,26 @@ export default function ProjectDetailPage() {
                               )}
                             </td>
                             <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <div className="w-16 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full ${
-                                      task.status === "done"
-                                        ? "bg-green-500"
-                                        : task.status === "overdue"
-                                        ? "bg-red-500"
-                                        : "bg-indigo-500"
-                                    }`}
-                                    style={{ width: `${task.progress_pct}%` }}
-                                  />
+                              <div className="flex items-center gap-1.5">
+                                <div className="flex gap-0.5">
+                                  {[25, 50, 75, 100].map((step) => (
+                                    <button
+                                      key={step}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const newPct = task.progress_pct >= step ? step - 25 : step;
+                                        updateScheduleTask(task.id, { progress_pct: newPct });
+                                      }}
+                                      className={`w-4 h-4 rounded-sm transition-colors ${
+                                        task.progress_pct >= step
+                                          ? "bg-green-500 hover:bg-green-600"
+                                          : "bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+                                      }`}
+                                      title={`${step}%`}
+                                    />
+                                  ))}
                                 </div>
-                                <span className="text-xs text-neutral-500">{task.progress_pct}%</span>
+                                <span className="text-xs text-neutral-500 w-8">{task.progress_pct}%</span>
                               </div>
                             </td>
                             <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400 max-w-[200px] truncate">
@@ -3178,12 +3444,57 @@ export default function ProjectDetailPage() {
                                   : startOffset;
                                 const barWidth = Math.max((endOffset - startOffset + 1) * dayWidth - 4, 8);
 
-                                const barColors: Record<string, string> = {
-                                  planned: "bg-blue-400 dark:bg-blue-600",
-                                  in_progress: "bg-amber-400 dark:bg-amber-600",
-                                  done: "bg-green-400 dark:bg-green-600",
-                                  overdue: "bg-red-400 dark:bg-red-600",
+                                // Convert hex to HSL for category color support
+                                const hexToHsl = (hex: string): [number, number, number] => {
+                                  const r = parseInt(hex.slice(1, 3), 16) / 255;
+                                  const g = parseInt(hex.slice(3, 5), 16) / 255;
+                                  const b = parseInt(hex.slice(5, 7), 16) / 255;
+                                  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+                                  const l = (max + min) / 2;
+                                  if (max === min) return [0, 0, l * 100];
+                                  const d = max - min;
+                                  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                                  let h = 0;
+                                  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+                                  else if (max === g) h = ((b - r) / d + 2) / 6;
+                                  else h = ((r - g) / d + 4) / 6;
+                                  return [h * 360, s * 100, l * 100];
                                 };
+
+                                const pct = task.progress_pct;
+                                const dark = document.documentElement.classList.contains("dark");
+
+                                // Status-based hue: green=default, red=overdue, blue=done
+                                // Category color used only if task has custom category color override
+                                // overdue + 100% = completed late → blue
+                                const statusHue = task.status === "done" ? 220
+                                  : (task.status === "overdue" && pct >= 100) ? 220
+                                  : task.status === "overdue" ? 0
+                                  : 140;
+                                const statusS = 70;
+                                const statusL = dark ? 45 : 50;
+
+                                // Use category color if it differs from default gray
+                                const catObj = categories.find((c) => c.name === task.category);
+                                const hasCatColor = catObj && catObj.color !== "#6b7280";
+                                const [catH, catS, catL] = hasCatColor ? hexToHsl(catObj.color) : [statusHue, statusS, statusL];
+                                const h = hasCatColor ? catH : statusHue;
+                                const s = hasCatColor ? catS : statusS;
+                                const l = hasCatColor ? catL : statusL;
+
+                                // 4-step saturation by progress (overdue: reversed)
+                                const step = pct >= 100 ? 4 : pct >= 75 ? 3 : pct >= 50 ? 2 : pct >= 25 ? 1 : 0;
+                                const isOverdue = task.status === "overdue";
+                                const ratio = [0.0, 0.25, 0.5, 0.75, 1.0][isOverdue ? 4 - step : step];
+
+                                const baseS = Math.round(s * (0.15 + 0.85 * ratio));
+                                const baseL = dark
+                                  ? Math.round(18 + 22 * ratio)   // dark: 18% → 40%
+                                  : Math.round(88 - 30 * ratio);  // light: 88% → 58%
+                                const barBg = `hsl(${h}, ${baseS}%, ${baseL}%)`;
+
+                                const fillL = dark ? Math.round(38 + 15 * ratio) : Math.round(l);
+                                const fillBg = `hsl(${h}, ${Math.round(s)}%, ${fillL}%)`;
 
                                 return (
                                   <div
@@ -3191,25 +3502,26 @@ export default function ProjectDetailPage() {
                                     className="absolute border-b border-neutral-100 dark:border-neutral-800"
                                     style={{ top: rowYOffsets[ri], height: rowHeight, width: "100%" }}
                                   >
-                                    {/* Task bar */}
+                                    {/* Task bar - desaturated base */}
                                     <div
-                                      className={`absolute top-1.5 h-5 rounded-sm ${barColors[task.status] || barColors.planned} opacity-80 hover:opacity-100 cursor-default`}
+                                      className="absolute top-1.5 h-5 rounded-sm opacity-90 hover:opacity-100 cursor-default overflow-hidden"
                                       style={{
                                         left: startOffset * dayWidth + 2,
                                         width: barWidth,
+                                        backgroundColor: barBg,
                                       }}
-                                      title={`${task.title} (${task.start_date} ~ ${task.end_date})`}
+                                      title={`${task.title} (${task.progress_pct}%) ${task.start_date} ~ ${task.end_date}`}
                                     >
-                                      {/* Progress fill */}
-                                      {task.progress_pct > 0 && task.progress_pct < 100 && (
+                                      {/* Progress fill - full saturation */}
+                                      {pct > 0 && (
                                         <div
-                                          className="absolute inset-y-0 left-0 bg-white/30 rounded-l-sm"
-                                          style={{ width: `${task.progress_pct}%` }}
+                                          className="absolute inset-y-0 left-0 rounded-l-sm"
+                                          style={{ width: `${pct}%`, backgroundColor: fillBg }}
                                         />
                                       )}
                                       {barWidth > 40 && (
-                                        <span className="absolute inset-0 flex items-center px-1 text-[9px] text-white font-medium truncate">
-                                          {task.title}{barWidth > 80 ? ` (${task.duration_days}d)` : ""}
+                                        <span className="absolute inset-0 flex items-center px-1.5 text-[9px] text-white font-medium truncate drop-shadow-sm z-10">
+                                          {task.title}{barWidth > 60 ? ` ${pct}%` : ""}{barWidth > 100 ? ` (${task.duration_days}d)` : ""}
                                         </span>
                                       )}
                                     </div>
@@ -3547,6 +3859,14 @@ export default function ProjectDetailPage() {
                       onChange={(e) => setMetaDraft((d) => ({ ...d, 오너: e.target.value }))}
                       placeholder="Owner name..."
                       className="w-full px-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {/* Related Projects */}
+                  <div>
+                    <RelatedProjectsInput
+                      value={metaDraft["연관프로젝트"] ? metaDraft["연관프로젝트"].split(",").map((s: string) => s.trim()).filter(Boolean) : []}
+                      onChange={(v) => setMetaDraft((d) => ({ ...d, "연관프로젝트": v.join(", ") }))}
                     />
                   </div>
                 </>

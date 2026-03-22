@@ -174,8 +174,13 @@ def _parse_readme(project_path: Path) -> tuple[str | None, str | None]:
 
 
 def _parse_idea_note_title(project_path: Path) -> str | None:
-    """Extract title from _아이디어노트.md first # heading."""
-    idea_note = project_path / "docs" / "_아이디어노트.md"
+    """Extract title from _아이디어노트.md first # heading.
+
+    Checks docs/아이디어/_아이디어노트.md first, falls back to docs/_아이디어노트.md.
+    """
+    idea_note = project_path / "docs" / "아이디어" / "_아이디어노트.md"
+    if not idea_note.is_file():
+        idea_note = project_path / "docs" / "_아이디어노트.md"
     if not idea_note.is_file():
         return None
 
@@ -195,26 +200,19 @@ def _parse_idea_note_title(project_path: Path) -> str | None:
 
 
 def _get_last_modified(project_path: Path) -> str | None:
-    """Get the most recent file modification time in a project."""
+    """Get project modification time using directory and key file mtimes.
+
+    Uses lightweight check (dir mtime + docs/ mtime) instead of recursive walk.
+    """
     latest = 0.0
     try:
-        for root, _dirs, files in os.walk(project_path):
-            # Skip hidden directories and common large dirs
-            root_path = Path(root)
-            if any(part.startswith(".") for part in root_path.parts):
-                continue
-            if "node_modules" in root_path.parts or "__pycache__" in root_path.parts:
-                continue
-            for f in files:
-                if f.startswith("."):
-                    continue
-                try:
-                    fpath = root_path / f
-                    mtime = fpath.stat().st_mtime
-                    if mtime > latest:
-                        latest = mtime
-                except OSError:
-                    continue
+        latest = project_path.stat().st_mtime
+        # Also check docs/ dir mtime for document-level changes
+        docs_dir = project_path / "docs"
+        if docs_dir.is_dir():
+            docs_mtime = docs_dir.stat().st_mtime
+            if docs_mtime > latest:
+                latest = docs_mtime
     except OSError:
         return None
 
@@ -223,7 +221,23 @@ def _get_last_modified(project_path: Path) -> str | None:
     return datetime.fromtimestamp(latest).isoformat()
 
 
+_scan_cache: dict[str, Any] = {"data": None, "time": 0.0}
+_SCAN_CACHE_TTL = 5.0  # seconds
+
+
 def scan_projects() -> list[dict[str, Any]]:
+    """Scan ~/Projects/{0-7}_*/ folders and return project list (cached 5s)."""
+    import time
+    now = time.time()
+    if _scan_cache["data"] is not None and (now - _scan_cache["time"]) < _SCAN_CACHE_TTL:
+        return _scan_cache["data"]
+    result = _scan_projects_uncached()
+    _scan_cache["data"] = result
+    _scan_cache["time"] = now
+    return result
+
+
+def _scan_projects_uncached() -> list[dict[str, Any]]:
     """Scan ~/Projects/{0-7}_*/ folders and return project list."""
     projects: list[dict[str, Any]] = []
 
@@ -248,13 +262,31 @@ def scan_projects() -> list[dict[str, Any]]:
                 "path": str(item),
             }
 
-            # Check for docs/_아이디어노트.md
-            idea_note = item / "docs" / "_아이디어노트.md"
-            if idea_note.exists():
-                metadata = _parse_idea_note(idea_note)
-                project["metadata"] = metadata
+            # Check for docs/_project.yaml first, fall back to docs/_아이디어노트.md
+            project_yaml = item / "docs" / "_project.yaml"
+            if project_yaml.exists():
+                project["metadata"] = _read_project_yaml(item)
             else:
-                project["metadata"] = {}
+                idea_note = item / "docs" / "_아이디어노트.md"
+                if idea_note.exists():
+                    metadata = _parse_idea_note(idea_note)
+                    project["metadata"] = metadata
+                else:
+                    project["metadata"] = {}
+
+            # Extract description from 아이디어/_아이디어노트.md body (new structure)
+            if not project["metadata"].get("description"):
+                new_idea = item / "docs" / "아이디어" / "_아이디어노트.md"
+                if new_idea.is_file():
+                    try:
+                        body_content = new_idea.read_text(encoding="utf-8")
+                        for bline in body_content.splitlines():
+                            bstripped = bline.strip()
+                            if bstripped and not bstripped.startswith("#"):
+                                project["metadata"]["description"] = bstripped
+                                break
+                    except (OSError, UnicodeDecodeError):
+                        pass
 
             # Fallback: if no description, try README.md
             if not project["metadata"].get("description"):
@@ -295,13 +327,15 @@ def scan_projects() -> list[dict[str, Any]]:
 def _find_project_path(project_name: str) -> Path | None:
     """Find a project path across all stage folders.
 
-    Prefer paths that have docs/_아이디어노트.md to avoid residual folders.
+    Prefer paths that have docs/_project.yaml or docs/_아이디어노트.md to avoid residual folders.
     """
     fallback = None
     for stage_folder in STAGE_FOLDERS.values():
         candidate = PROJECTS_ROOT / stage_folder / project_name
         if candidate.is_dir():
-            # Prefer path with actual docs
+            # Prefer path with actual docs (new structure first)
+            if (candidate / "docs" / "_project.yaml").is_file():
+                return candidate
             if (candidate / "docs" / "_아이디어노트.md").is_file():
                 return candidate
             if fallback is None:
@@ -314,32 +348,39 @@ EDITABLE_META_KEYS = {
     "중요도", "위급도", "긴급도", "협업", "주도", "오너", "label",
     "유형", "포트", "상태",
     "목표종료일", "실제종료일", "subtasks_total", "subtasks_done",
-    "related_people",
+    "related_people", "연관프로젝트",
 }
 
 
 def update_metadata(project_name: str, updates: dict[str, str]) -> dict[str, Any]:
-    """Update metadata fields in a project's _아이디어노트.md.
+    """Update metadata fields in a project's docs/_project.yaml (or legacy _아이디어노트.md).
 
-    Uses YAML frontmatter if present, otherwise converts blockquote to YAML.
+    Writes to docs/_project.yaml (pure YAML, no frontmatter wrapper).
+    Auto-creates _project.yaml if missing.
     """
     project_path = _find_project_path(project_name)
     if project_path is None:
         return {"success": False, "message": f"Project not found: {project_name}"}
 
-    idea_note = project_path / "docs" / "_아이디어노트.md"
+    project_yaml = project_path / "docs" / "_project.yaml"
 
     # Auto-create if doesn't exist
-    if not idea_note.exists():
-        idea_note.parent.mkdir(parents=True, exist_ok=True)
-        from datetime import date
-        meta = {"label": project_name, "작성일": date.today().isoformat(), "오너": "Chad"}
+    if not project_yaml.exists():
+        # Try reading existing metadata from old structure
+        existing_meta = _read_project_yaml(project_path)
+        if not existing_meta:
+            from datetime import date
+            existing_meta = {"label": project_name, "작성일": date.today().isoformat(), "오너": "Chad"}
+
         safe = {k: v for k, v in updates.items() if k in EDITABLE_META_KEYS and v}
-        meta.update(safe)
-        idea_note.write_text(
-            _build_yaml_frontmatter(meta) + f"\n# {project_name}\n",
-            encoding="utf-8",
-        )
+        existing_meta.update(safe)
+        existing_meta.pop("description", None)
+        _write_project_yaml(project_path, existing_meta)
+
+        # Also create 아이디어/ and 토의록/ directories
+        (project_path / "docs" / "아이디어").mkdir(parents=True, exist_ok=True)
+        (project_path / "docs" / "토의록").mkdir(parents=True, exist_ok=True)
+
         return {"success": True, "message": "Created and saved", "updated": list(safe.keys())}
 
     safe_updates = {k: v for k, v in updates.items() if k in EDITABLE_META_KEYS}
@@ -347,44 +388,15 @@ def update_metadata(project_name: str, updates: dict[str, str]) -> dict[str, Any
         return {"success": False, "message": "No valid metadata keys provided"}
 
     try:
-        content = idea_note.read_text(encoding="utf-8")
-        yaml_meta, body = _parse_yaml_frontmatter(content)
+        # Read existing metadata from _project.yaml
+        existing_meta = _read_project_yaml(project_path)
+        for k, v in safe_updates.items():
+            if v:
+                existing_meta[k] = v
+            elif k in existing_meta:
+                del existing_meta[k]
 
-        if yaml_meta:
-            # Update existing YAML frontmatter
-            for k, v in safe_updates.items():
-                if v:
-                    yaml_meta[k] = v
-                elif k in yaml_meta:
-                    del yaml_meta[k]
-            new_content = _build_yaml_frontmatter(yaml_meta) + body
-        else:
-            # Convert blockquote to YAML frontmatter
-            existing_meta = _parse_idea_note(idea_note)
-            existing_meta.update({k: v for k, v in safe_updates.items() if v})
-            for k in safe_updates:
-                if not safe_updates[k] and k in existing_meta:
-                    del existing_meta[k]
-
-            # Remove blockquote lines and rebuild with YAML
-            lines = content.splitlines()
-            body_lines: list[str] = []
-            skip_blockquotes = True
-            for line in lines:
-                stripped = line.strip()
-                if skip_blockquotes and stripped.startswith(">"):
-                    continue
-                if skip_blockquotes and stripped == "---":
-                    skip_blockquotes = False
-                    continue
-                skip_blockquotes = False
-                body_lines.append(line)
-
-            # Remove description from metadata (it lives in body)
-            desc = existing_meta.pop("description", None)
-            new_content = _build_yaml_frontmatter(existing_meta) + "\n".join(body_lines)
-
-        idea_note.write_text(new_content, encoding="utf-8")
+        _write_project_yaml(project_path, existing_meta)
         return {"success": True, "message": "Metadata updated", "updated": list(safe_updates.keys())}
     except OSError as e:
         return {"success": False, "message": f"Failed to update: {e}"}
@@ -414,6 +426,34 @@ def delete_type_all(type_name: str) -> int:
     return count
 
 
+def sync_related_projects_rename(old_name: str, new_name: str) -> int:
+    """Update 연관프로젝트 references across all projects when a folder is renamed.
+
+    Scans every project's metadata and replaces occurrences of *old_name*
+    with *new_name* in the comma-separated 연관프로젝트 field.
+
+    Returns the number of projects whose metadata was updated.
+    """
+    count = 0
+    for stage_folder in STAGE_FOLDERS.values():
+        stage_path = PROJECTS_ROOT / stage_folder
+        if not stage_path.is_dir():
+            continue
+        for item in stage_path.iterdir():
+            if not item.is_dir() or item.name.startswith("."):
+                continue
+            meta = _read_project_yaml(item)
+            related = meta.get("연관프로젝트", "")
+            if not related:
+                continue
+            names = [n.strip() for n in related.split(",") if n.strip()]
+            if old_name in names:
+                new_names = [new_name if n == old_name else n for n in names]
+                update_metadata(item.name, {"연관프로젝트": ", ".join(new_names)})
+                count += 1
+    return count
+
+
 def _build_yaml_frontmatter(metadata: dict[str, Any]) -> str:
     """Build YAML frontmatter string from metadata dict."""
     if not metadata:
@@ -437,31 +477,133 @@ def _build_yaml_frontmatter(metadata: dict[str, Any]) -> str:
     return f"---\n{yaml_str}---\n"
 
 
+def _build_pure_yaml(metadata: dict[str, Any]) -> str:
+    """Build pure YAML string (no --- delimiters) from metadata dict."""
+    if not metadata:
+        return ""
+    # Order keys for readability (same as _build_yaml_frontmatter)
+    key_order = [
+        "label", "작성일", "상태", "유형", "포트",
+        "중요도", "위급도", "긴급도", "협업", "주도", "오너",
+        "목표종료일", "실제종료일", "subtasks_total", "subtasks_done",
+        "related_people",
+    ]
+    ordered: dict[str, Any] = {}
+    for k in key_order:
+        if k in metadata:
+            ordered[k] = metadata[k]
+    for k, v in metadata.items():
+        if k not in ordered:
+            ordered[k] = v
+
+    return yaml.dump(ordered, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+
+def _read_project_yaml(project_path: Path) -> dict[str, Any]:
+    """Read project metadata from docs/_project.yaml (new structure).
+
+    Falls back to _parse_idea_note() for old structure (docs/_아이디어노트.md).
+    """
+    project_yaml = project_path / "docs" / "_project.yaml"
+    if project_yaml.is_file():
+        try:
+            content = project_yaml.read_text(encoding="utf-8")
+            data = yaml.safe_load(content)
+            if isinstance(data, dict):
+                metadata: dict[str, Any] = {}
+                for k, v in data.items():
+                    if isinstance(v, list):
+                        metadata[k] = v
+                    elif v is not None:
+                        metadata[k] = str(v)
+                return metadata
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            pass
+
+    # Fallback: old structure
+    idea_note = project_path / "docs" / "_아이디어노트.md"
+    if idea_note.is_file():
+        return _parse_idea_note(idea_note)
+
+    return {}
+
+
+def _write_project_yaml(project_path: Path, metadata: dict[str, Any]) -> None:
+    """Write pure YAML to docs/_project.yaml (no --- delimiters)."""
+    project_yaml = project_path / "docs" / "_project.yaml"
+    project_yaml.parent.mkdir(parents=True, exist_ok=True)
+    # Remove description from metadata (lives in body/아이디어노트)
+    clean = {k: v for k, v in metadata.items() if k != "description"}
+    project_yaml.write_text(_build_pure_yaml(clean), encoding="utf-8")
+
+
 def update_description(project_name: str, description: str) -> dict[str, Any]:
-    """Update the description in a project's _아이디어노트.md file."""
+    """Update the description in a project's docs/아이디어/_아이디어노트.md file.
+
+    Falls back to docs/_아이디어노트.md for old structure.
+    """
     project_path = _find_project_path(project_name)
     if project_path is None:
         return {"success": False, "message": f"Project not found: {project_name}"}
 
-    idea_note = project_path / "docs" / "_아이디어노트.md"
+    # New structure: docs/아이디어/_아이디어노트.md
+    new_idea_note = project_path / "docs" / "아이디어" / "_아이디어노트.md"
+    old_idea_note = project_path / "docs" / "_아이디어노트.md"
 
-    # Auto-create if doesn't exist
-    if not idea_note.exists():
-        idea_note.parent.mkdir(parents=True, exist_ok=True)
-        from datetime import date
-        today = date.today().isoformat()
-        idea_note.write_text(
-            f"---\nlabel: {project_name}\n작성일: '{today}'\n오너: Chad\n---\n\n# {project_name}\n\n{description}\n",
+    # Determine which file to use
+    if new_idea_note.exists():
+        idea_note = new_idea_note
+        is_new_structure = True
+    elif old_idea_note.exists():
+        idea_note = old_idea_note
+        is_new_structure = False
+    else:
+        # Auto-create new structure
+        new_idea_note.parent.mkdir(parents=True, exist_ok=True)
+        display_name = project_name
+        # Try to get label from _project.yaml
+        meta = _read_project_yaml(project_path)
+        if meta.get("label"):
+            display_name = meta["label"]
+        new_idea_note.write_text(
+            f"# {display_name}\n\n{description}\n",
             encoding="utf-8",
         )
-        synced = ["_아이디어노트.md (created)"]
-        _sync_readme_description(project_path, project_name, description, synced)
+        # Ensure _project.yaml exists too
+        if not (project_path / "docs" / "_project.yaml").exists():
+            from datetime import date
+            _write_project_yaml(project_path, {
+                "label": display_name, "작성일": date.today().isoformat(), "오너": "Chad",
+            })
+        synced = ["아이디어/_아이디어노트.md (created)"]
+        _sync_readme_description(project_path, display_name, description, synced)
         return {"success": True, "message": "Created and saved", "synced_to": synced}
 
     try:
         content = idea_note.read_text(encoding="utf-8")
 
-        # YAML frontmatter: just update/create body description
+        if is_new_structure:
+            # New structure: pure markdown body, replace description paragraph
+            body_lines = content.splitlines()
+            new_body: list[str] = []
+            replaced = False
+            for line in body_lines:
+                s = line.strip()
+                if not replaced and s and not s.startswith("#"):
+                    new_body.append(description)
+                    replaced = True
+                    continue
+                new_body.append(line)
+            if not replaced:
+                new_body.append("")
+                new_body.append(description)
+            idea_note.write_text("\n".join(new_body), encoding="utf-8")
+            synced = ["아이디어/_아이디어노트.md"]
+            _sync_readme_description(project_path, project_name, description, synced)
+            _sync_discussion_description(project_path, description, synced)
+            return {"success": True, "message": "Description updated", "synced_to": synced}
+
+        # Old structure: YAML frontmatter format
         yaml_meta, body = _parse_yaml_frontmatter(content)
         if yaml_meta:
             # Replace first non-heading, non-empty paragraph in body
@@ -586,8 +728,13 @@ def _sync_readme_description(
 def _sync_discussion_description(
     project_path: Path, description: str, synced: list[str]
 ) -> None:
-    """Sync description to _토의록.md header comment if it exists."""
-    discussion = project_path / "docs" / "_토의록.md"
+    """Sync description to _토의록.md header comment if it exists.
+
+    Checks docs/토의록/_토의록.md first, falls back to docs/_토의록.md.
+    """
+    discussion = project_path / "docs" / "토의록" / "_토의록.md"
+    if not discussion.is_file():
+        discussion = project_path / "docs" / "_토의록.md"
     if not discussion.is_file():
         return
 
@@ -608,13 +755,27 @@ def _sync_discussion_description(
 
         if replaced:
             discussion.write_text("\n".join(new_lines), encoding="utf-8")
-            synced.append("_토의록.md")
+            # Report relative path from docs/
+            rel_name = str(discussion.relative_to(project_path / "docs"))
+            synced.append(rel_name)
     except (OSError, UnicodeDecodeError):
         pass
 
 
 def migrate_to_yaml_frontmatter() -> dict[str, Any]:
-    """Migrate all _아이디어노트.md files from blockquote to YAML frontmatter."""
+    """Legacy alias for migrate_to_new_structure()."""
+    return migrate_to_new_structure()
+
+
+def migrate_to_new_structure() -> dict[str, Any]:
+    """Migrate projects from old structure (docs/_아이디어노트.md with YAML frontmatter)
+    to new structure:
+      - docs/_project.yaml (pure YAML metadata)
+      - docs/아이디어/_아이디어노트.md (pure markdown body)
+      - docs/아이디어/ directory (always created)
+      - docs/토의록/ directory (always created)
+      - docs/_토의록.md moved to docs/토의록/_토의록.md
+    """
     migrated: list[str] = []
     skipped: list[str] = []
     errors: list[str] = []
@@ -627,11 +788,24 @@ def migrate_to_yaml_frontmatter() -> dict[str, Any]:
         for item in stage_path.iterdir():
             if not item.is_dir() or item.name.startswith("."):
                 continue
-            if item.name in COMMON_FOLDERS:
+            if item.name in COMMON_FOLDERS or item.name.startswith("_"):
                 continue
 
-            idea_note = item / "docs" / "_아이디어노트.md"
+            docs_dir = item / "docs"
+            idea_note = docs_dir / "_아이디어노트.md"
+            project_yaml = docs_dir / "_project.yaml"
+
+            # Always ensure 아이디어/ and 토의록/ directories exist
+            (docs_dir / "아이디어").mkdir(parents=True, exist_ok=True)
+            (docs_dir / "토의록").mkdir(parents=True, exist_ok=True)
+
+            # Skip if already migrated (has _project.yaml, no old _아이디어노트.md)
+            if project_yaml.is_file() and not idea_note.is_file():
+                skipped.append(item.name)
+                continue
+
             if not idea_note.is_file():
+                skipped.append(item.name)
                 continue
 
             try:
@@ -639,7 +813,7 @@ def migrate_to_yaml_frontmatter() -> dict[str, Any]:
 
                 lines = content.splitlines()
 
-                # If already has YAML frontmatter, merge blockquotes into it
+                # Parse YAML frontmatter if present
                 if content.startswith("---"):
                     yaml_meta, body = _parse_yaml_frontmatter(content)
                     body_lines_raw = body.splitlines()
@@ -668,7 +842,6 @@ def migrate_to_yaml_frontmatter() -> dict[str, Any]:
                         skip_next_separator = False
                         continue
                     if stripped == "":
-                        # Track if we just removed blockquotes
                         if body_lines and body_lines[-1:] == [""]:
                             skip_next_separator = True
                         body_lines.append(line)
@@ -686,7 +859,7 @@ def migrate_to_yaml_frontmatter() -> dict[str, Any]:
                             metadata.setdefault("label", title)
                         break
 
-                # Remove description from frontmatter (lives in body)
+                # Remove description from metadata (lives in body)
                 metadata.pop("description", None)
 
                 # Clean body: remove leading/trailing empty lines
@@ -695,9 +868,25 @@ def migrate_to_yaml_frontmatter() -> dict[str, Any]:
                 while body_lines and body_lines[-1].strip() == "":
                     body_lines.pop()
 
-                yaml_header = _build_yaml_frontmatter(metadata)
-                new_content = yaml_header + "\n".join(body_lines) + "\n"
-                idea_note.write_text(new_content, encoding="utf-8")
+                # (a) Write docs/_project.yaml (pure YAML, no --- delimiters)
+                _write_project_yaml(item, metadata)
+
+                # (b) Write docs/아이디어/_아이디어노트.md (pure markdown body)
+                new_idea_note = docs_dir / "아이디어" / "_아이디어노트.md"
+                new_idea_note.write_text("\n".join(body_lines) + "\n", encoding="utf-8")
+
+                # (d) Move docs/_토의록.md to docs/토의록/_토의록.md if exists
+                old_discussion = docs_dir / "_토의록.md"
+                new_discussion = docs_dir / "토의록" / "_토의록.md"
+                if old_discussion.is_file() and not new_discussion.is_file():
+                    shutil.move(str(old_discussion), str(new_discussion))
+
+                # (e) Delete original docs/_아이디어노트.md
+                idea_note.unlink()
+
+                # (f) Delete original docs/_토의록.md if it was moved
+                # (already handled by shutil.move above)
+
                 migrated.append(item.name)
 
             except (OSError, UnicodeDecodeError) as e:
@@ -738,8 +927,16 @@ def create_project(
     description: str = "",
     project_type: str = "",
     stage: str = "1_idea_stage",
+    related_projects: str = "",
 ) -> dict[str, Any]:
-    """Create a new project folder with docs and _아이디어노트.md."""
+    """Create a new project folder with new docs structure.
+
+    Creates:
+      - docs/_project.yaml (pure YAML metadata)
+      - docs/아이디어/ directory
+      - docs/아이디어/_아이디어노트.md (pure markdown body)
+      - docs/토의록/ directory
+    """
     stage_path = PROJECTS_ROOT / stage
     if not stage_path.is_dir():
         stage_path.mkdir(parents=True, exist_ok=True)
@@ -765,15 +962,27 @@ def create_project(
         }
         if project_type:
             meta["유형"] = project_type
+        if related_projects:
+            meta["연관프로젝트"] = related_projects
 
-        idea_note = _build_yaml_frontmatter(meta)
+        # Write docs/_project.yaml (pure YAML, no --- delimiters)
+        _write_project_yaml(project_path, meta)
+
+        # Create docs/아이디어/ directory and _아이디어노트.md
+        idea_dir = docs_dir / "아이디어"
+        idea_dir.mkdir()
         body = f"# {display_name}\n\n"
         if description:
             body += f"{description}\n"
+        (idea_dir / "_아이디어노트.md").write_text(body, encoding="utf-8")
 
-        (docs_dir / "_아이디어노트.md").write_text(
-            idea_note + body, encoding="utf-8"
-        )
+        # Create docs/토의록/ directory
+        (docs_dir / "토의록").mkdir()
+
+        # Create docs/_settings/project_note/ directory
+        settings_dir = docs_dir / "_settings"
+        settings_dir.mkdir(exist_ok=True)
+        (settings_dir / "project_note").mkdir()
 
         return {
             "success": True,
@@ -806,16 +1015,25 @@ def clone_project(project_name: str) -> dict[str, Any]:
     try:
         shutil.copytree(project_path, clone_path)
 
-        # Update label in cloned project's _아이디어노트.md
-        idea_note = clone_path / "docs" / "_아이디어노트.md"
-        if idea_note.exists():
-            content = idea_note.read_text(encoding="utf-8")
-            yaml_meta, body = _parse_yaml_frontmatter(content)
-            if yaml_meta:
-                old_label = yaml_meta.get("label", project_name)
-                yaml_meta["label"] = f"[COPY] {old_label}"
-                new_content = _build_yaml_frontmatter(yaml_meta) + body
-                idea_note.write_text(new_content, encoding="utf-8")
+        # Update label in cloned project's metadata
+        clone_project_yaml = clone_path / "docs" / "_project.yaml"
+        if clone_project_yaml.exists():
+            # New structure: update _project.yaml
+            clone_meta = _read_project_yaml(clone_path)
+            old_label = clone_meta.get("label", project_name)
+            clone_meta["label"] = f"[COPY] {old_label}"
+            _write_project_yaml(clone_path, clone_meta)
+        else:
+            # Fallback: old structure with _아이디어노트.md
+            idea_note = clone_path / "docs" / "_아이디어노트.md"
+            if idea_note.exists():
+                content = idea_note.read_text(encoding="utf-8")
+                yaml_meta, body = _parse_yaml_frontmatter(content)
+                if yaml_meta:
+                    old_label = yaml_meta.get("label", project_name)
+                    yaml_meta["label"] = f"[COPY] {old_label}"
+                    new_content = _build_yaml_frontmatter(yaml_meta) + body
+                    idea_note.write_text(new_content, encoding="utf-8")
 
         return {
             "success": True,
@@ -892,15 +1110,15 @@ def create_transition_note(
     if project_path is None:
         return {"success": False, "message": "Project not found after move"}
 
-    docs_dir = project_path / "docs"
-    docs_dir.mkdir(parents=True, exist_ok=True)
+    instruction_dir = project_path / "docs" / "작업지시"
+    instruction_dir.mkdir(parents=True, exist_ok=True)
 
     now = datetime.now()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M")
     filename = f"작업지시_{date_str}.md"
 
-    filepath = docs_dir / filename
+    filepath = instruction_dir / filename
 
     # Stage label mapping
     stage_labels = {v: v.split("_", 1)[1].replace("_", " ").title() if "_" in v else v
@@ -971,14 +1189,14 @@ def create_manual_instruction(
     if project_path is None:
         return {"success": False, "message": f"Project not found: {project_name}"}
 
-    docs_dir = project_path / "docs"
-    docs_dir.mkdir(parents=True, exist_ok=True)
+    instruction_dir = project_path / "docs" / "작업지시"
+    instruction_dir.mkdir(parents=True, exist_ok=True)
 
     now = datetime.now()
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M")
     filename = f"작업지시_{date_str}.md"
-    filepath = docs_dir / filename
+    filepath = instruction_dir / filename
 
     default_checklist = ["Review instruction", "Execute tasks", "Update status", "Update work instruction status upon completion"]
     checklist_items = checklist if checklist else default_checklist
@@ -1046,7 +1264,10 @@ def scan_discussions() -> list[dict[str, Any]]:
             if item.name in COMMON_FOLDERS:
                 continue
 
-            discussion_file = item / "docs" / "_토의록.md"
+            # Check new path first, fall back to old path
+            discussion_file = item / "docs" / "토의록" / "_토의록.md"
+            if not discussion_file.is_file():
+                discussion_file = item / "docs" / "_토의록.md"
             if not discussion_file.is_file():
                 continue
 

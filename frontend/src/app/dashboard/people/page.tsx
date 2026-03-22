@@ -1,789 +1,32 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Users,
-  Building2,
-  Mail,
-  Tag,
-  Edit3,
-  Trash2,
-  Plus,
   Search,
   X,
-  Save,
+  Plus,
   Loader2,
-  Link2,
   LayoutGrid,
   List,
-  Check,
-  Star,
-  Smile,
-  GripVertical,
-  Camera,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import toast from "react-hot-toast";
 import { useLocale } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/AppDialogs";
-import { ListExportBar, generateMD, generateCSV, downloadFile, printList } from "@/components/ListExportBar";
+import dynamic from "next/dynamic";
+const PeopleNetwork = dynamic(() => import("@/components/PeopleNetwork").then(m => ({ default: m.PeopleNetwork })), { ssr: false });
 
-// Types
-interface Person {
-  id: string;
-  name: string;
-  alias: string;
-  role: string;
-  affiliation: string;
-  industry: string;
-  email: string;
-  expertise: string[];
-  relationship: string;
-  hierarchy: string;
-  importance: number;
-  closeness: number;
-  notes: string;
-  projects: string[];
-  connections: string[];
-  photo: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface PersonFormData {
-  name: string;
-  alias: string;
-  role: string;
-  affiliation: string;
-  industry: string;
-  email: string;
-  expertise: string;
-  relationship: string;
-  hierarchy: string;
-  importance: string;
-  closeness: string;
-  notes: string;
-  projects: string[];
-  connections: string[];
-}
-
-const RELATIONSHIP_COLORS: Record<string, string> = {
-  self: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
-  "co-author": "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
-  advisor: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
-  advisee: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
-  student: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  colleague: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  friend: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
-  external: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-};
-
-const RELATIONSHIP_OPTIONS = [
-  "self",
-  "co-author",
-  "advisor",
-  "advisee",
-  "student",
-  "colleague",
-  "friend",
-  "external",
-];
-
-const HIERARCHY_OPTIONS = ["선배", "동기", "후배", "???"];
-const HIERARCHY_COLORS: Record<string, string> = {
-  "선배": "text-purple-600 dark:text-purple-400",
-  "동기": "text-blue-600 dark:text-blue-400",
-  "후배": "text-green-600 dark:text-green-400",
-  "???": "text-neutral-400 dark:text-neutral-500",
-};
-
-const EMPTY_FORM: PersonFormData = {
-  name: "",
-  alias: "",
-  role: "",
-  affiliation: "",
-  industry: "",
-  email: "",
-  expertise: "",
-  relationship: "colleague",
-  hierarchy: "",
-  importance: "0",
-  closeness: "0",
-  notes: "",
-  projects: [],
-  connections: [],
-};
-
-// Star/Smile rating component
-function RatingInput({
-  value,
-  onChange,
-  max = 5,
-  icon: Icon,
-  activeColor,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  max?: number;
-  icon: typeof Star;
-  activeColor: string;
-}) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {Array.from({ length: max }).map((_, i) => (
-        <button
-          key={i}
-          type="button"
-          onClick={() => onChange(value === i + 1 ? 0 : i + 1)}
-          className={`p-0.5 rounded transition-colors ${
-            i < value ? activeColor : "text-neutral-300 dark:text-neutral-600 hover:text-neutral-400"
-          }`}
-        >
-          <Icon className="w-4 h-4" fill={i < value ? "currentColor" : "none"} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// Reusable form component for create and edit
-function PersonForm({
-  initial,
-  onSave,
-  onCancel,
-  saving,
-  allPeople = [],
-  allProjectLabels = [],
-  currentId,
-  currentPhoto,
-}: {
-  initial: PersonFormData;
-  allProjectLabels?: string[];
-  onSave: (data: PersonFormData) => void;
-  onCancel: () => void;
-  saving: boolean;
-  allPeople?: Person[];
-  currentId?: string;
-  currentPhoto?: string;
-}) {
-  const { t } = useLocale();
-  const [form, setForm] = useState<PersonFormData>(initial);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(
-    currentPhoto ? `/api/people/photos/${encodeURIComponent(currentPhoto)}` : null
-  );
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const photoInputRef = useRef<HTMLInputElement>(null);
-
-  const handlePhotoUpload = async (file: File) => {
-    if (!currentId) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file");
-      return;
-    }
-    setUploadingPhoto(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const token = typeof window !== "undefined" ? localStorage.getItem("pm_token") : null;
-      const res = await fetch(`/api/people/${currentId}/photo`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
-      if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json();
-      setPhotoPreview(`/api/people/photos/${encodeURIComponent(data.photo)}?t=${Date.now()}`);
-      toast.success("Photo uploaded");
-    } catch {
-      toast.error("Failed to upload photo");
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
-
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
-  ) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  return (
-    <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl p-5 space-y-4">
-      {/* Photo upload area - only when editing */}
-      {currentId && (
-        <div className="mb-2">
-          <div
-            className={`relative w-20 h-20 rounded-lg border-2 border-dashed border-neutral-300 dark:border-neutral-600 flex items-center justify-center cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors overflow-hidden bg-neutral-100 dark:bg-neutral-800 ${uploadingPhoto ? "opacity-60 pointer-events-none" : ""}`}
-            onClick={() => photoInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const file = e.dataTransfer.files?.[0]; if (file) handlePhotoUpload(file); }}
-          >
-            {photoPreview ? (
-              <img src={photoPreview} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <div className="text-center text-neutral-400 dark:text-neutral-500">
-                <Camera className="w-5 h-5 mx-auto mb-0.5 opacity-40" />
-                <p className="text-[8px]">사진</p>
-              </div>
-            )}
-            {uploadingPhoto && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                <Loader2 className="w-6 h-6 animate-spin text-white" />
-              </div>
-            )}
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => { const file = e.target.files?.[0]; if (file) handlePhotoUpload(file); }}
-            />
-          </div>
-          {photoPreview && (
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  const token = typeof window !== "undefined" ? localStorage.getItem("pm_token") : null;
-                  await fetch(`/api/people/${currentId}/photo`, {
-                    method: "DELETE",
-                    headers: token ? { Authorization: `Bearer ${token}` } : {},
-                  });
-                  setPhotoPreview(null);
-                  toast.success("Photo removed");
-                } catch { toast.error("Failed"); }
-              }}
-              className="mt-1 text-xs text-red-400 hover:text-red-600 transition-colors"
-            >
-              사진 제거
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            {t("people.name")} *
-          </label>
-          <input
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            placeholder={t("people.fullName")}
-            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            별칭
-          </label>
-          <input
-            name="alias"
-            value={form.alias}
-            onChange={handleChange}
-            placeholder="별칭 (선택)"
-            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            {t("people.role")}
-          </label>
-          <input
-            name="role"
-            value={form.role}
-            onChange={handleChange}
-            placeholder="e.g. Professor, Researcher, Student"
-            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            {t("people.affiliation")}
-          </label>
-          <input
-            name="affiliation"
-            value={form.affiliation}
-            onChange={handleChange}
-            placeholder="University or Organization"
-            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            산업
-          </label>
-          <input
-            name="industry"
-            value={form.industry}
-            onChange={handleChange}
-            placeholder="e.g. Education, IT, Healthcare"
-            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            {t("people.email")}
-          </label>
-          {(() => {
-            const emails = form.email ? form.email.split(",").map((e) => e.trim()) : [""];
-            const updateEmails = (newEmails: string[]) => setForm({ ...form, email: newEmails.join(", ") });
-            return (
-              <div className="space-y-1.5">
-                {emails.map((em, idx) => (
-                  <div key={idx} className="flex items-center gap-1">
-                    <input
-                      value={em}
-                      onChange={(e) => { const arr = [...emails]; arr[idx] = e.target.value; updateEmails(arr); }}
-                      placeholder="email@example.com"
-                      className="flex-1 px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    {emails.length > 1 && (
-                      <button type="button" onClick={() => { const arr = emails.filter((_, i) => i !== idx); updateEmails(arr.length ? arr : [""]); }} className="p-1 text-neutral-400 hover:text-red-500 rounded"><X className="w-3.5 h-3.5" /></button>
-                    )}
-                  </div>
-                ))}
-                <button type="button" onClick={() => updateEmails([...emails, ""])} className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300">
-                  <Plus className="w-3 h-3" /> Add email
-                </button>
-              </div>
-            );
-          })()}
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            {t("people.relationship")}
-          </label>
-          <select
-            name="relationship"
-            value={form.relationship}
-            onChange={handleChange}
-            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            {RELATIONSHIP_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            위계
-          </label>
-          <select
-            name="hierarchy"
-            value={form.hierarchy}
-            onChange={handleChange}
-            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="">--</option>
-            {HIERARCHY_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Importance + Closeness */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            중요도
-          </label>
-          <RatingInput
-            value={parseInt(form.importance) || 0}
-            onChange={(v) => setForm({ ...form, importance: String(v) })}
-            icon={Star}
-            activeColor="text-amber-400"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            친밀도
-          </label>
-          <RatingInput
-            value={parseInt(form.closeness) || 0}
-            onChange={(v) => setForm({ ...form, closeness: String(v) })}
-            icon={Smile}
-            activeColor="text-pink-400"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-          {t("people.expertiseHint")}
-        </label>
-        <input
-          name="expertise"
-          value={form.expertise}
-          onChange={handleChange}
-          placeholder="e.g. HRD, AI, Bibliometrics"
-          className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-          {t("people.notes")}
-        </label>
-        <textarea
-          name="notes"
-          value={form.notes}
-          onChange={handleChange}
-          rows={2}
-          placeholder="Free text notes"
-          className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-        />
-      </div>
-      {/* Projects */}
-      {allProjectLabels.length > 0 && (
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            연관 프로젝트
-          </label>
-          <div className="flex flex-wrap gap-1.5 p-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg min-h-[36px]">
-            {allProjectLabels.map((proj) => {
-              const isSelected = form.projects.includes(proj);
-              return (
-                <button
-                  key={proj}
-                  type="button"
-                  onClick={() =>
-                    setForm((f) => ({
-                      ...f,
-                      projects: isSelected
-                        ? f.projects.filter((p) => p !== proj)
-                        : [...f.projects, proj],
-                    }))
-                  }
-                  className={`px-2 py-0.5 rounded-full text-xs transition-colors ${
-                    isSelected
-                      ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
-                      : "bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600"
-                  }`}
-                >
-                  {proj}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {/* Connections */}
-      {allPeople.length > 0 && (
-        <div>
-          <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-            {t("people.connectedPeople")}
-          </label>
-          <div className="flex flex-wrap gap-1.5 p-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg min-h-[36px]">
-            {[...allPeople]
-              .filter((p) => p.id !== currentId)
-              .sort((a, b) => {
-                if (a.relationship === "self" && b.relationship !== "self") return -1;
-                if (b.relationship === "self" && a.relationship !== "self") return 1;
-                return (b.importance || 0) - (a.importance || 0);
-              })
-              .map((p) => {
-                const isSelected = form.connections.includes(p.id);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() =>
-                      setForm((f) => ({
-                        ...f,
-                        connections: isSelected
-                          ? f.connections.filter((id) => id !== p.id)
-                          : [...f.connections, p.id],
-                      }))
-                    }
-                    className={`px-2 py-0.5 rounded-full text-xs transition-colors ${
-                      isSelected
-                        ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
-                        : "bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-300 dark:hover:bg-neutral-600"
-                    }`}
-                  >
-                    {p.name}{p.alias ? ` (${p.alias})` : ""}
-                  </button>
-                );
-              })}
-          </div>
-        </div>
-      )}
-
-      <div className="flex gap-2 justify-end">
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 rounded-lg text-sm text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-        >
-          {t("action.cancel")}
-        </button>
-        <button
-          onClick={() => onSave(form)}
-          disabled={saving || !form.name.trim()}
-          className="px-4 py-2 rounded-lg text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-        >
-          {saving ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          {t("action.save")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Person card component
-function PersonCard({
-  person,
-  allPeople,
-  allProjectLabels,
-  onEdit,
-  onDelete,
-  editing,
-  onSaveEdit,
-  onCancelEdit,
-  saving,
-  dragHandlers,
-  isDragged,
-  isDragOver,
-}: {
-  person: Person;
-  allPeople: Person[];
-  allProjectLabels: string[];
-  onEdit: () => void;
-  onDelete: () => void;
-  editing: boolean;
-  onSaveEdit: (data: PersonFormData) => void;
-  onCancelEdit: () => void;
-  saving: boolean;
-  dragHandlers?: {
-    onDragStart: () => void;
-    onDragEnd: () => void;
-    onDragOver: (e: React.DragEvent) => void;
-    onDrop: () => void;
-    onDragLeave: () => void;
-  };
-  isDragged?: boolean;
-  isDragOver?: boolean;
-}) {
-  const { t } = useLocale();
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  if (editing) {
-    return (
-      <PersonForm
-        initial={{
-          name: person.name,
-          alias: person.alias,
-          role: person.role,
-          affiliation: person.affiliation,
-          industry: person.industry || "",
-          email: person.email,
-          expertise: person.expertise.join(", "),
-          relationship: person.relationship,
-          hierarchy: person.hierarchy || "",
-          importance: String(person.importance || 0),
-          closeness: String(person.closeness || 0),
-          notes: person.notes,
-          projects: person.projects || [],
-          connections: person.connections || [],
-        }}
-        onSave={onSaveEdit}
-        onCancel={onCancelEdit}
-        saving={saving}
-        allPeople={allPeople}
-        allProjectLabels={allProjectLabels}
-        currentId={person.id}
-        currentPhoto={person.photo}
-      />
-    );
-  }
-
-  const relColor =
-    RELATIONSHIP_COLORS[person.relationship] || RELATIONSHIP_COLORS.external;
-
-  return (
-    <div
-      className={`bg-white dark:bg-neutral-900 rounded-xl p-5 hover:border-neutral-300 dark:hover:border-neutral-600 transition-colors group ${
-        isDragged
-          ? "opacity-50 border border-neutral-300 dark:border-neutral-800"
-          : isDragOver
-          ? "border border-indigo-400 dark:border-indigo-500"
-          : person.relationship === "self"
-          ? "border-2 border-amber-400 dark:border-amber-500"
-          : "border border-neutral-200 dark:border-neutral-700"
-      }`}
-      draggable
-      onDragStart={dragHandlers?.onDragStart}
-      onDragEnd={dragHandlers?.onDragEnd}
-      onDragOver={dragHandlers?.onDragOver}
-      onDrop={dragHandlers?.onDrop}
-      onDragLeave={dragHandlers?.onDragLeave}
-    >
-      {/* Header with photo */}
-      <div className="flex gap-4 mb-3">
-        {/* Photo thumbnail */}
-        <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-neutral-100 dark:bg-neutral-800">
-          {person.photo ? (
-            <img src={`/api/people/photos/${encodeURIComponent(person.photo)}`} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-neutral-300 dark:text-neutral-600">
-              <Users className="w-7 h-7" />
-            </div>
-          )}
-        </div>
-        {/* Name + affiliation + details */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1">
-                <GripVertical className="w-3 h-3 text-neutral-300 dark:text-neutral-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
-                <h3 className="text-lg font-semibold text-neutral-900 dark:text-white truncate">
-                  {person.name}
-                </h3>
-              </div>
-            </div>
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
-              <button onClick={onEdit} className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300" title="Edit">
-                <Edit3 className="w-4 h-4" />
-              </button>
-              <button onClick={() => { if (confirmDelete) { onDelete(); setConfirmDelete(false); } else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); } }} className={`p-1 rounded transition-colors ${confirmDelete ? "bg-red-100 dark:bg-red-950 text-red-600" : "hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500"}`} title={confirmDelete ? "Click again to confirm" : "Delete"}>
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          {/* Alias + Role */}
-          {(person.alias || person.role) && (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400 pl-4">
-              {person.alias && <span>{person.alias}</span>}
-              {person.alias && person.role && <span className="text-neutral-300 dark:text-neutral-600 mx-1">·</span>}
-              {person.role && <span>{person.role}</span>}
-            </p>
-          )}
-          {/* Affiliation */}
-          {person.affiliation && (
-            <p className="text-sm text-neutral-400 dark:text-neutral-500 pl-4 truncate">{person.affiliation}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Details — text aligned with name */}
-      <div className="pl-4">
-
-        {/* Industry (affiliation moved to header) */}
-        {person.industry && (
-          <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400 mb-1">
-            <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="truncate">{person.industry}</span>
-          </div>
-        )}
-
-        {/* Email(s) */}
-        {person.email && (
-          <div className="flex items-start gap-2 text-sm text-neutral-600 dark:text-neutral-400 mb-2">
-            <Mail className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-            <div className="flex flex-col gap-0.5 min-w-0">
-              {person.email.split(",").map((em, i) => (
-                <a key={i} href={`mailto:${em.trim()}`} className="truncate hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">{em.trim()}</a>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Expertise tags */}
-        {person.expertise.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {person.expertise.map((exp, i) => (
-              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
-                <Tag className="w-2.5 h-2.5" />{exp}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Relationship + Hierarchy + Importance + Closeness */}
-        <div className="flex items-center gap-1.5 flex-wrap mb-2">
-        {person.relationship && (
-          <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${relColor}`}>
-            {person.relationship}
-          </span>
-        )}
-        {person.hierarchy && (
-          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${HIERARCHY_COLORS[person.hierarchy] || "text-neutral-500"}`}>
-            {person.hierarchy}
-          </span>
-        )}
-        {(person.importance || 0) > 0 && (
-          <span className="inline-flex text-amber-400" title={`중요도: ${person.importance}/5`}>
-            {Array.from({ length: person.importance }).map((_, i) => (
-              <Star key={i} className="w-3 h-3" fill="currentColor" />
-            ))}
-          </span>
-        )}
-        {(person.closeness || 0) > 0 && (
-          <span className="inline-flex text-pink-400" title={`친밀도: ${person.closeness}/5`}>
-            {Array.from({ length: person.closeness }).map((_, i) => (
-              <Smile key={i} className="w-3 h-3" />
-            ))}
-          </span>
-        )}
-      </div>
-
-
-      </div>
-
-      {/* Notes — separated by line, boxed */}
-      {person.notes && (
-        <>
-          <div className="border-t border-neutral-100 dark:border-neutral-800 my-2" />
-          <div className="bg-neutral-50 dark:bg-neutral-800/50 rounded-md px-3 py-2">
-            <p className="text-xs text-neutral-600 dark:text-neutral-400 line-clamp-5 whitespace-pre-line">
-              {person.notes}
-            </p>
-          </div>
-        </>
-      )}
-
-      {/* Projects — show latest 3 in card view, one per line */}
-      {person.projects.length > 0 && (
-        <div className="mt-3">
-          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-500 mb-1">Projects</p>
-          <div className="pl-2 space-y-0.5">
-            {person.projects.slice(-3).map((proj, i) => (
-              <p key={i} className="text-xs text-neutral-500 dark:text-neutral-400 truncate">· {proj}</p>
-            ))}
-            {person.projects.length > 3 && (
-              <p className="text-xs text-neutral-400">+{person.projects.length - 3} more</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Connections */}
-      {person.connections && person.connections.length > 0 && (
-        <div className="flex items-start gap-1.5 text-xs text-neutral-500 dark:text-neutral-500">
-          <Link2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
-          <span>
-            {person.connections
-              .map((cid) => {
-                const connected = allPeople.find((p) => p.id === cid);
-                return connected ? connected.name : cid;
-              })
-              .join(", ")}
-          </span>
-        </div>
-      )}
-
-    </div>
-  );
-}
+import {
+  PersonCard,
+  PersonForm,
+  PeopleFilter,
+  PeopleListView,
+  type Person,
+  type PersonFormData,
+  type PeopleFilters,
+  EMPTY_FORM,
+} from "@/components/people";
 
 // Main page component
 export default function PeoplePage() {
@@ -826,15 +69,7 @@ export default function PeoplePage() {
   const [groupBy, setGroupBy] = useState<"none" | "hierarchy" | "role" | "industry" | "importance" | "closeness" | "project">("none");
 
   // Checkbox filters
-  const [filters, setFilters] = useState<{
-    relationships: Set<string>;
-    affiliations: Set<string>;
-    industries: Set<string>;
-    hierarchies: Set<string>;
-    roles: Set<string>;
-    importances: Set<string>;
-    closenesses: Set<string>;
-  }>({ relationships: new Set(), affiliations: new Set(), industries: new Set(), hierarchies: new Set(), roles: new Set(), importances: new Set(), closenesses: new Set() });
+  const [filters, setFilters] = useState<PeopleFilters>({ relationships: new Set(), affiliations: new Set(), industries: new Set(), hierarchies: new Set(), roles: new Set(), importances: new Set(), closenesses: new Set() });
 
   // Persist people order
   useEffect(() => {
@@ -850,7 +85,7 @@ export default function PeoplePage() {
   const uniqueImportances = useMemo(() => [...new Set(people.map((p) => String(p.importance || 0)).filter((v) => v !== "0"))].sort(), [people]);
   const uniqueClosenesses = useMemo(() => [...new Set(people.map((p) => String(p.closeness || 0)).filter((v) => v !== "0"))].sort(), [people]);
 
-  const toggleFilter = (group: keyof typeof filters, value: string) => {
+  const toggleFilter = (group: keyof PeopleFilters, value: string) => {
     setFilters((prev) => {
       const next = new Set(prev[group]);
       if (next.has(value)) {
@@ -1153,7 +388,7 @@ export default function PeoplePage() {
   };
 
   // Separate self group for card view
-  const selfPeople = orderedPeople.filter((p) => p.relationship === "self");
+  const selfPeople = people.filter((p) => p.relationship === "self");
   const nonSelfPeople = orderedPeople.filter((p) => p.relationship !== "self");
 
   // Render card section
@@ -1282,134 +517,24 @@ export default function PeoplePage() {
 
       {/* Relationship group filter buttons */}
       {!loading && people.length > 0 && (
-        <div className="mb-4 space-y-3">
-          {/* Relationship group buttons */}
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setRelFilter("all")}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                relFilter === "all"
-                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                  : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-              }`}
-            >
-              All
-            </button>
-            {uniqueRelationships.map((rel) => {
-              const relColor = RELATIONSHIP_COLORS[rel] || RELATIONSHIP_COLORS.external;
-              return (
-                <button
-                  key={rel}
-                  onClick={() => setRelFilter(relFilter === rel ? "all" : rel)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    relFilter === rel ? relColor + " ring-2 ring-offset-1 ring-indigo-400" : relColor + " opacity-70 hover:opacity-100"
-                  }`}
-                >
-                  {rel} ({people.filter((p) => p.relationship === rel).length})
-                </button>
-              );
-            })}
-            {/* Group by buttons */}
-            <span className="text-neutral-300 dark:text-neutral-600 mx-1">|</span>
-            {(["none", "hierarchy", "role", "industry", "importance", "closeness", "project"] as const).map((g) => {
-              const labels: Record<string, string> = { none: "Flat", hierarchy: "위계별", role: "역할별", industry: "산업별", importance: "중요도별", closeness: "친밀도별", project: "프로젝트별" };
-              return (
-                <button
-                  key={g}
-                  onClick={() => setGroupBy(groupBy === g ? "none" : g)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    groupBy === g && g !== "none"
-                      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                      : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-                  }`}
-                >
-                  {labels[g]}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Checkbox filters — collapsible */}
-          <details className="text-xs">
-            <summary className="cursor-pointer text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 text-xs mb-1.5 select-none">Filters</summary>
-          <div className="space-y-1.5">
-            {uniqueAffiliations.length > 1 && (
-              <div className="flex items-center gap-2">
-                <span className="text-neutral-400 font-medium w-14 flex-shrink-0">소속</span>
-                {uniqueAffiliations.map((v) => (
-                  <label key={v} className="flex items-center gap-1 cursor-pointer text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-                    <input type="checkbox" checked={filters.affiliations.has(v)} onChange={() => toggleFilter("affiliations", v)} className="w-3 h-3 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500" />
-                    {v}
-                  </label>
-                ))}
-              </div>
-            )}
-            {uniqueIndustries.length > 1 && (
-              <div className="flex items-center gap-2">
-                <span className="text-neutral-400 font-medium w-14 flex-shrink-0">산업</span>
-                {uniqueIndustries.map((v) => (
-                  <label key={v} className="flex items-center gap-1 cursor-pointer text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-                    <input type="checkbox" checked={filters.industries.has(v)} onChange={() => toggleFilter("industries", v)} className="w-3 h-3 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500" />
-                    {v}
-                  </label>
-                ))}
-              </div>
-            )}
-            {uniqueHierarchies.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-neutral-400 font-medium w-14 flex-shrink-0">위계</span>
-                {uniqueHierarchies.map((v) => (
-                  <label key={v} className="flex items-center gap-1 cursor-pointer text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-                    <input type="checkbox" checked={filters.hierarchies.has(v)} onChange={() => toggleFilter("hierarchies", v)} className="w-3 h-3 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500" />
-                    {v}
-                  </label>
-                ))}
-              </div>
-            )}
-            {uniqueRoles.length > 1 && (
-              <div className="flex items-center gap-2">
-                <span className="text-neutral-400 font-medium w-14 flex-shrink-0">역할</span>
-                {uniqueRoles.map((v) => (
-                  <label key={v} className="flex items-center gap-1 cursor-pointer text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-                    <input type="checkbox" checked={filters.roles.has(v)} onChange={() => toggleFilter("roles", v)} className="w-3 h-3 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500" />
-                    {v}
-                  </label>
-                ))}
-              </div>
-            )}
-            {uniqueImportances.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-neutral-400 font-medium w-14 flex-shrink-0">중요도</span>
-                {uniqueImportances.map((v) => (
-                  <label key={v} className="flex items-center gap-1 cursor-pointer text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-                    <input type="checkbox" checked={filters.importances.has(v)} onChange={() => toggleFilter("importances", v)} className="w-3 h-3 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500" />
-                    {"★".repeat(parseInt(v))}
-                  </label>
-                ))}
-              </div>
-            )}
-            {uniqueClosenesses.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-neutral-400 font-medium w-14 flex-shrink-0">친밀도</span>
-                {uniqueClosenesses.map((v) => (
-                  <label key={v} className="flex items-center gap-1 cursor-pointer text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white">
-                    <input type="checkbox" checked={filters.closenesses.has(v)} onChange={() => toggleFilter("closenesses", v)} className="w-3 h-3 rounded border-neutral-300 text-indigo-600 focus:ring-indigo-500" />
-                    {v}
-                  </label>
-                ))}
-              </div>
-            )}
-            {hasActiveFilters && (
-              <button
-                onClick={() => setFilters({ relationships: new Set(), affiliations: new Set(), industries: new Set(), hierarchies: new Set(), roles: new Set(), importances: new Set(), closenesses: new Set() })}
-                className="text-indigo-600 dark:text-indigo-400 hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-          </details>
-        </div>
+        <PeopleFilter
+          people={people}
+          relFilter={relFilter}
+          setRelFilter={setRelFilter}
+          groupBy={groupBy}
+          setGroupBy={setGroupBy}
+          filters={filters}
+          toggleFilter={toggleFilter}
+          hasActiveFilters={hasActiveFilters}
+          clearFilters={() => setFilters({ relationships: new Set(), affiliations: new Set(), industries: new Set(), hierarchies: new Set(), roles: new Set(), importances: new Set(), closenesses: new Set() })}
+          uniqueAffiliations={uniqueAffiliations}
+          uniqueIndustries={uniqueIndustries}
+          uniqueHierarchies={uniqueHierarchies}
+          uniqueRoles={uniqueRoles}
+          uniqueImportances={uniqueImportances}
+          uniqueClosenesses={uniqueClosenesses}
+          uniqueRelationships={uniqueRelationships}
+        />
       )}
 
       {/* Loading state */}
@@ -1427,15 +552,37 @@ export default function PeoplePage() {
       ) : viewMode === "card" ? (
         /* Card grid with grouping */
         <div className="space-y-6">
+          {/* Self + Network — always pinned at top regardless of filters/groups */}
+          {selfPeople.length > 0 && (
+            <div>
+              <h2 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Self</h2>
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
+                <div>
+                  {selfPeople.map((person) => (
+                    <PersonCard
+                      key={person.id}
+                      person={person}
+                      allPeople={people}
+                      allProjectLabels={allProjectLabels}
+                      onEdit={() => setEditingId(person.id)}
+                      onDelete={() => handleDelete(person.id)}
+                      editing={editingId === person.id}
+                      onSaveEdit={(data) => handleUpdate(person.id, data)}
+                      onCancelEdit={() => setEditingId(null)}
+                      saving={saving}
+                    />
+                  ))}
+                </div>
+                <div className="xl:col-span-2 bg-white dark:bg-neutral-900 rounded-xl border-2 border-amber-400 dark:border-amber-500 p-3 overflow-hidden">
+                  <h3 className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-2">연관인물 네트워크</h3>
+                  <PeopleNetwork width={800} height={400} filterNodeIds={hasActiveFilters ? filteredPeople.map((p) => p.id) : null} />
+                </div>
+              </div>
+            </div>
+          )}
+
           {groupBy === "none" ? (
             <>
-              {/* Self section */}
-              {selfPeople.length > 0 && relFilter === "all" && (
-                <div>
-                  <h2 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Self</h2>
-                  {renderCardGrid(selfPeople)}
-                </div>
-              )}
               {nonSelfPeople.length > 0 && renderCardGrid(nonSelfPeople)}
               {relFilter === "self" && renderCardGrid(orderedPeople)}
             </>
@@ -1482,13 +629,6 @@ export default function PeoplePage() {
               }
               return (
                 <>
-                  {/* Self always first */}
-                  {selfPeople.length > 0 && relFilter === "all" && (
-                    <div>
-                      <h2 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">Self</h2>
-                      {renderCardGrid(selfPeople)}
-                    </div>
-                  )}
                   {groupOrder.map((key) => {
                     const groupPeople = (groups[key] || []).filter((p) => p.relationship !== "self");
                     if (groupPeople.length === 0) return null;
@@ -1512,267 +652,30 @@ export default function PeoplePage() {
         </div>
       ) : (
         /* List view */
-        <>
-          <ListExportBar
-            onPrint={() => {
-              const rows = filteredPeople.map((p) => ({
-                Name: p.name,
-                "별칭": p.alias || "-",
-                Role: p.role || "-",
-                Affiliation: p.affiliation || "-",
-                Email: p.email || "-",
-                Relationship: p.relationship || "-",
-                중요도: p.importance ? String(p.importance) : "-",
-                친밀도: p.closeness ? String(p.closeness) : "-",
-                Expertise: p.expertise.length > 0 ? p.expertise.join(", ") : "-",
-                Projects: p.projects.length > 0 ? p.projects.join(", ") : "-",
-              }));
-              printList("People", rows);
-            }}
-            onExportMD={() => {
-              const rows = filteredPeople.map((p) => ({
-                Name: p.name,
-                "별칭": p.alias || "-",
-                Role: p.role || "-",
-                Affiliation: p.affiliation || "-",
-                Email: p.email || "-",
-                Relationship: p.relationship || "-",
-                중요도: p.importance ? String(p.importance) : "-",
-                친밀도: p.closeness ? String(p.closeness) : "-",
-                Expertise: p.expertise.length > 0 ? p.expertise.join(", ") : "-",
-                Projects: p.projects.length > 0 ? p.projects.join(", ") : "-",
-              }));
-              downloadFile(generateMD("People", rows), "people.md", "text/markdown");
-            }}
-            onExportCSV={() => {
-              const rows = filteredPeople.map((p) => ({
-                Name: p.name,
-                "별칭": p.alias || "",
-                Role: p.role || "",
-                Affiliation: p.affiliation || "",
-                Email: p.email || "",
-                Relationship: p.relationship || "",
-                중요도: String(p.importance || 0),
-                친밀도: String(p.closeness || 0),
-                Expertise: p.expertise.join(", "),
-                Projects: p.projects.join(", "),
-              }));
-              downloadFile(generateCSV(rows), "people.csv", "text/csv");
-            }}
-          />
-          <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50">
-                  {[
-                    { key: "name", label: "Name" },
-                    { key: "role", label: "Role" },
-                    { key: "affiliation", label: "Affiliation" },
-                    { key: "industry", label: "산업" },
-                    { key: "email", label: "Email" },
-                    { key: "relationship", label: "Relationship" },
-                    { key: "hierarchy", label: "위계" },
-                    { key: "importance", label: "중요도" },
-                    { key: "closeness", label: "친밀도" },
-                  ].map((col) => (
-                    <th
-                      key={col.key}
-                      className="text-left px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider cursor-pointer select-none"
-                      onClick={() => toggleSort(col.key)}
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        {col.label}
-                        {sortKey === col.key && (
-                          <span className="text-indigo-500">{sortDir === "asc" ? "\u2191" : "\u2193"}</span>
-                        )}
-                      </span>
-                    </th>
-                  ))}
-                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {filteredPeople.map((person) => {
-                  const relColor =
-                    RELATIONSHIP_COLORS[person.relationship] || RELATIONSHIP_COLORS.external;
-                  const isEditing = listEditingId === person.id;
-                  const inputClass =
-                    "w-full px-2 py-1 rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500";
-                  return (
-                    <tr
-                      key={person.id}
-                      className={`transition-colors ${isEditing ? "bg-indigo-50/50 dark:bg-indigo-950/20" : "hover:bg-neutral-50 dark:hover:bg-neutral-800/50"}`}
-                    >
-                      <td className="px-4 py-3">
-                        {isEditing ? (
-                          <input
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className={inputClass}
-                            autoFocus
-                            onKeyDown={(e) => { if (e.key === "Enter") saveListEdit(); if (e.key === "Escape") cancelListEdit(); }}
-                          />
-                        ) : (
-                          <div>
-                            <p className="font-medium text-neutral-900 dark:text-white">
-                              {person.name}
-                            </p>
-                            {person.alias && (
-                              <p className="text-xs text-neutral-400">{person.alias}</p>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {isEditing ? (
-                          <input
-                            value={editRole}
-                            onChange={(e) => setEditRole(e.target.value)}
-                            className={inputClass}
-                            onKeyDown={(e) => { if (e.key === "Enter") saveListEdit(); if (e.key === "Escape") cancelListEdit(); }}
-                          />
-                        ) : (
-                          <span className="text-neutral-600 dark:text-neutral-400">{person.role || "-"}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {isEditing ? (
-                          <input
-                            value={editAffiliation}
-                            onChange={(e) => setEditAffiliation(e.target.value)}
-                            className={inputClass}
-                            onKeyDown={(e) => { if (e.key === "Enter") saveListEdit(); if (e.key === "Escape") cancelListEdit(); }}
-                          />
-                        ) : (
-                          <span className="text-neutral-600 dark:text-neutral-400">{person.affiliation || "-"}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400 text-sm">
-                        {person.industry || "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        {isEditing ? (
-                          <input
-                            value={editEmail}
-                            onChange={(e) => setEditEmail(e.target.value)}
-                            className={inputClass}
-                            onKeyDown={(e) => { if (e.key === "Enter") saveListEdit(); if (e.key === "Escape") cancelListEdit(); }}
-                          />
-                        ) : person.email ? (
-                          <a
-                            href={`mailto:${person.email}`}
-                            className="text-neutral-600 dark:text-neutral-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                          >
-                            {person.email}
-                          </a>
-                        ) : (
-                          <span className="text-neutral-300">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {isEditing ? (
-                          <select
-                            value={editRelationship}
-                            onChange={(e) => setEditRelationship(e.target.value)}
-                            className={inputClass}
-                          >
-                            {RELATIONSHIP_OPTIONS.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        ) : person.relationship ? (
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${relColor}`}
-                          >
-                            {person.relationship}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3">
-                        {isEditing ? (
-                          <select
-                            value={editHierarchy}
-                            onChange={(e) => setEditHierarchy(e.target.value)}
-                            className={inputClass}
-                          >
-                            <option value="">--</option>
-                            {HIERARCHY_OPTIONS.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        ) : person.hierarchy ? (
-                          <span className={`text-xs font-medium ${HIERARCHY_COLORS[person.hierarchy] || ""}`}>
-                            {person.hierarchy}
-                          </span>
-                        ) : <span className="text-neutral-300">-</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        {(person.importance || 0) > 0 ? (
-                          <span className="inline-flex text-amber-400">
-                            {Array.from({ length: person.importance }).map((_, i) => (
-                              <Star key={i} className="w-3 h-3" fill="currentColor" />
-                            ))}
-                          </span>
-                        ) : <span className="text-neutral-300">-</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        {(person.closeness || 0) > 0 ? (
-                          <span className="inline-flex text-pink-400">
-                            {Array.from({ length: person.closeness }).map((_, i) => (
-                              <Smile key={i} className="w-3 h-3" />
-                            ))}
-                          </span>
-                        ) : <span className="text-neutral-300">-</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {isEditing ? (
-                            <>
-                              <button
-                                onClick={saveListEdit}
-                                disabled={saving || !editName.trim()}
-                                className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 rounded transition-colors disabled:opacity-50"
-                                title="Save"
-                              >
-                                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                              </button>
-                              <button
-                                onClick={cancelListEdit}
-                                className="p-1.5 text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors"
-                                title="Cancel"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => startListEdit(person)}
-                                className="p-1.5 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded transition-colors"
-                                title="Edit"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => confirmDeletePerson(person)}
-                                className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
+        <PeopleListView
+          filteredPeople={filteredPeople}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          toggleSort={toggleSort}
+          listEditingId={listEditingId}
+          editName={editName}
+          setEditName={setEditName}
+          editRole={editRole}
+          setEditRole={setEditRole}
+          editAffiliation={editAffiliation}
+          setEditAffiliation={setEditAffiliation}
+          editEmail={editEmail}
+          setEditEmail={setEditEmail}
+          editRelationship={editRelationship}
+          setEditRelationship={setEditRelationship}
+          editHierarchy={editHierarchy}
+          setEditHierarchy={setEditHierarchy}
+          saving={saving}
+          saveListEdit={saveListEdit}
+          cancelListEdit={cancelListEdit}
+          startListEdit={startListEdit}
+          confirmDeletePerson={confirmDeletePerson}
+        />
       )}
       <ConfirmDialog
         open={!!confirmDialog}

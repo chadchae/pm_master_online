@@ -135,7 +135,7 @@ export default function ProjectsPage() {
               const stage = getStageByFolder(project.stage);
               return (
                 <tr
-                  key={project.name}
+                  key={`${project.stage}/${project.name}`}
                   onClick={() => router.push(`/dashboard/projects/${encodeURIComponent(project.name)}`)}
                   className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors"
                 >
@@ -191,6 +191,7 @@ export default function ProjectsPage() {
       </div>
       <NewProjectDialog
         open={showNewProject}
+        typeOptions={[...new Set(projects.map((p: { metadata?: { "유형"?: string } }) => p.metadata?.["유형"] || "").filter(Boolean))].sort()}
         onCancel={() => setShowNewProject(false)}
         onConfirm={async (data) => {
           setShowNewProject(false);
@@ -201,6 +202,7 @@ export default function ProjectsPage() {
                 folder_name: data.folder,
                 label: data.label,
                 project_type: data.projectType,
+                related_projects: data.relatedProjects,
                 stage: "2_initiation_stage",
               }),
             });

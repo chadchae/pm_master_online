@@ -8,7 +8,7 @@ from typing import Any
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "todos"
 
-DEFAULT_COLUMNS = ["todo", "in_progress", "done"]
+DEFAULT_COLUMNS = ["todo", "in_progress", "done", "waiting", "archive"]
 
 
 def _get_data_file(project_name: str) -> Path:
@@ -77,7 +77,7 @@ def update_todo(
     data = _load_todos(project_name)
     for item in data["items"]:
         if item["id"] == todo_id:
-            for key in ("title", "description", "priority", "assignee", "due_date", "completed_at"):
+            for key in ("title", "description", "priority", "assignee", "due_date", "completed_at", "starred"):
                 if key in updates:
                     item[key] = updates[key]
             item["updated_at"] = str(date.today())

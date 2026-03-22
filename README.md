@@ -2,9 +2,11 @@
 
 [Korean](README_KO.md) | [Chinese](README_ZH.md)
 
-> **Local-first Personal Project Hub**
+> **Network-accessible Personal Project Management System**
 
-PM Master Online is a local-first project manager that manages your entire `~/Projects/` folder from the web. It syncs directly with the filesystem without a database -- your folder structure *is* your project state. Visualize and manage a 7-stage lifecycle from idea to archive with kanban boards, and get per-project gantt charts, issue trackers, todo kanbans, and a markdown document editor. The work instruction system and embedded terminal (xterm.js) integrate directly with Claude Code to power AI-driven development workflows. It handles both research workflows (literature review, analysis, paper writing) and software development in a single interface. With Korean/English i18n, dark/light themes, and one-command setup, all data stays in local JSON files for complete privacy.
+The online-accessible version of PM Master -- a database-free, filesystem-based all-in-one project management system accessible from any device on the network. Manages your `~/Projects/` folder structure as a fully managed project lifecycle with remote access capability.
+
+PM Master Online manages a 7-stage lifecycle (Idea > Initiation > Development > Testing > Completed > Archived > Discarded) with kanban boards, per-project Gantt charts, 5-column todo boards, issue trackers, markdown editors, and an embedded terminal (xterm.js) that integrates directly with Claude Code for AI-driven workflows. It handles both research workflows (literature review, analysis, paper writing) and software development in a single interface, with Korean/English i18n and dark/light themes. Default ports: Backend 8002, Frontend 3002.
 
 ## Screenshots
 

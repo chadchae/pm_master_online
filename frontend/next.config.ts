@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 import { execSync } from "child_process";
 
-const backendPort = process.env.NEXT_PUBLIC_BACKEND_PORT || "8002";
+const backendPort = process.env.NEXT_PUBLIC_BACKEND_PORT || "8000";
 
 let gitVersion = "dev";
 try {
@@ -9,6 +9,7 @@ try {
 } catch { /* ignore */ }
 
 const nextConfig: NextConfig = {
+  reactStrictMode: false,
   env: {
     NEXT_PUBLIC_VERSION: gitVersion,
   },

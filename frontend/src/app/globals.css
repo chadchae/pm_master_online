@@ -86,3 +86,23 @@ body {
 .animate-slide-in {
   animation: slide-in-right 0.2s ease-out;
 }
+
+/* KaTeX Korean/CJK font support */
+.katex,
+.katex .mathrm,
+.katex .textrm,
+.katex .mathit,
+.katex .mathnormal,
+.katex .mord,
+.katex .mord .text,
+.katex .mord .textrm,
+.katex .text .mord,
+.katex span {
+  font-family: "KaTeX_Main", "KaTeX_Math", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Microsoft YaHei", sans-serif !important;
+}
+
+/* KaTeX error color override — show unsupported chars in normal color */
+.katex .mord.text .katex-error,
+.katex .katex-error {
+  color: inherit !important;
+}

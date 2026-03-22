@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/lib/useAuth";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "react-hot-toast";
+import { FocusProvider } from "@/lib/focusMode";
 
 export default function DashboardLayout({
   children,
@@ -34,10 +35,12 @@ export default function DashboardLayout({
       />
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <PageHeader />
-        <main className="flex-1 overflow-auto bg-neutral-50 dark:bg-neutral-950 p-6">
-          {children}
-        </main>
+        <FocusProvider>
+          <PageHeader />
+          <main className="flex-1 overflow-auto bg-neutral-50 dark:bg-neutral-950 p-6">
+            {children}
+          </main>
+        </FocusProvider>
       </div>
     </div>
   );

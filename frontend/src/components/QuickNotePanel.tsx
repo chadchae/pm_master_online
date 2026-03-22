@@ -10,6 +10,9 @@ import {
   Loader2,
   StickyNote,
   ChevronDown,
+  ChevronRight,
+  Pencil,
+  Check,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useLocale } from "@/lib/i18n";
@@ -44,6 +47,12 @@ export function QuickNotePanel({ open, onClose }: QuickNotePanelProps) {
   const [showNew, setShowNew] = useState(false);
   const [moveTarget, setMoveTarget] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState(NOTE_TARGETS[0].file);
+  const [expandedNote, setExpandedNote] = useState<string | null>(null);
+  const [noteContents, setNoteContents] = useState<Record<string, string>>({});
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [loadingContent, setLoadingContent] = useState<string | null>(null);
 
   const loadNotes = useCallback(async () => {
     setLoading(true);
@@ -93,6 +102,50 @@ export function QuickNotePanel({ open, onClose }: QuickNotePanelProps) {
       loadNotes();
     } catch {
       toast.error(t("toast.failedToDelete"));
+    }
+  };
+
+  const toggleExpand = async (filename: string) => {
+    if (expandedNote === filename) {
+      setExpandedNote(null);
+      setEditingNote(null);
+      return;
+    }
+    setExpandedNote(filename);
+    setEditingNote(null);
+    if (!noteContents[filename]) {
+      setLoadingContent(filename);
+      try {
+        const res = await apiFetch<{ content: string }>(`/api/quicknotes/${encodeURIComponent(filename)}`);
+        setNoteContents((prev) => ({ ...prev, [filename]: res.content }));
+      } catch {
+        setNoteContents((prev) => ({ ...prev, [filename]: "(failed to load)" }));
+      } finally {
+        setLoadingContent(null);
+      }
+    }
+  };
+
+  const startEdit = (filename: string) => {
+    setEditingNote(filename);
+    setEditContent(noteContents[filename] || "");
+  };
+
+  const saveEdit = async (filename: string) => {
+    setSavingEdit(true);
+    try {
+      await apiFetch(`/api/quicknotes/${encodeURIComponent(filename)}`, {
+        method: "PUT",
+        body: JSON.stringify({ content: editContent }),
+      });
+      setNoteContents((prev) => ({ ...prev, [filename]: editContent }));
+      setEditingNote(null);
+      toast.success("Updated");
+      loadNotes();
+    } catch {
+      toast.error("Failed to update");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -200,20 +253,42 @@ export function QuickNotePanel({ open, onClose }: QuickNotePanelProps) {
             </div>
           ) : (
             <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
-              {notes.map((note) => (
+              {notes.map((note) => {
+                const isExpanded = expandedNote === note.filename;
+                const isEditing = editingNote === note.filename;
+                return (
                 <div key={note.filename} className="px-4 py-3 group">
                   <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200 truncate">
-                        {note.filename.replace(/\.md$/, "")}
-                      </p>
-                      <p className="text-xs text-neutral-400 mt-0.5">
-                        {(note.size / 1024).toFixed(1)} KB
-                        {" · "}
-                        {new Date(note.last_modified * 1000).toLocaleDateString()}
-                      </p>
-                    </div>
+                    <button
+                      onClick={() => toggleExpand(note.filename)}
+                      className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+                    >
+                      {isExpanded ? (
+                        <ChevronDown className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200 truncate">
+                          {note.filename.replace(/\.md$/, "")}
+                        </p>
+                        <p className="text-xs text-neutral-400 mt-0.5">
+                          {(note.size / 1024).toFixed(1)} KB
+                          {" · "}
+                          {new Date(note.last_modified * 1000).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </button>
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {isExpanded && !isEditing && (
+                        <button
+                          onClick={() => startEdit(note.filename)}
+                          className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 text-blue-500 transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         onClick={() =>
                           setMoveTarget(
@@ -235,9 +310,48 @@ export function QuickNotePanel({ open, onClose }: QuickNotePanelProps) {
                     </div>
                   </div>
 
+                  {/* Collapsible content */}
+                  {isExpanded && (
+                    <div className="mt-2 ml-5">
+                      {loadingContent === note.filename ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
+                      ) : isEditing ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            rows={8}
+                            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-md text-xs font-mono resize-y focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            autoFocus
+                          />
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              onClick={() => setEditingNote(null)}
+                              className="px-2 py-1 text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => saveEdit(note.filename)}
+                              disabled={savingEdit}
+                              className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-40 flex items-center gap-1"
+                            >
+                              {savingEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <pre className="text-xs text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap font-mono bg-neutral-50 dark:bg-neutral-800/50 rounded-md p-2 max-h-48 overflow-y-auto">
+                          {noteContents[note.filename] || ""}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+
                   {/* Move target selector */}
                   {moveTarget === note.filename && (
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2 ml-5 flex items-center gap-2">
                       <div className="relative flex-1">
                         <select
                           value={selectedTarget}
@@ -261,7 +375,8 @@ export function QuickNotePanel({ open, onClose }: QuickNotePanelProps) {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -304,6 +304,32 @@ def create_quicknote(title: str, content: str) -> dict[str, Any]:
         return {"success": False, "message": f"Failed to create: {e}"}
 
 
+def read_quicknote(filename: str) -> dict[str, Any]:
+    """Read a quick note's content from _notes/_temp/."""
+    temp_path = PROJECTS_ROOT / "_notes" / "_temp"
+    filepath = (temp_path / filename).resolve()
+    if not str(filepath).startswith(str(temp_path.resolve())) or not filepath.is_file():
+        return {"success": False, "message": "File not found"}
+    try:
+        content = filepath.read_text(encoding="utf-8")
+        return {"success": True, "filename": filename, "content": content}
+    except OSError as e:
+        return {"success": False, "message": f"Failed to read: {e}"}
+
+
+def update_quicknote(filename: str, content: str) -> dict[str, Any]:
+    """Update a quick note's content in _notes/_temp/."""
+    temp_path = PROJECTS_ROOT / "_notes" / "_temp"
+    filepath = (temp_path / filename).resolve()
+    if not str(filepath).startswith(str(temp_path.resolve())) or not filepath.is_file():
+        return {"success": False, "message": "File not found"}
+    try:
+        filepath.write_text(content, encoding="utf-8")
+        return {"success": True, "filename": filename, "message": "Updated"}
+    except OSError as e:
+        return {"success": False, "message": f"Failed to update: {e}"}
+
+
 def delete_quicknote(filename: str) -> dict[str, Any]:
     """Delete a quick note from _notes/_temp/."""
     temp_path = PROJECTS_ROOT / "_notes" / "_temp"
@@ -316,6 +342,82 @@ def delete_quicknote(filename: str) -> dict[str, Any]:
     if not filepath.is_file():
         return {"success": False, "message": "File not found"}
 
+    try:
+        filepath.unlink()
+        return {"success": True, "message": f"Deleted {filename}"}
+    except OSError as e:
+        return {"success": False, "message": f"Failed to delete: {e}"}
+
+
+# --- Project Memo (separate from quick notes, stored in _notes/_project_memo/) ---
+
+_PROJECT_MEMO_DIR = PROJECTS_ROOT / "_notes" / "_project_memo"
+
+
+def list_project_memos() -> list[dict[str, Any]]:
+    """List project memos from _notes/_project_memo/."""
+    _PROJECT_MEMO_DIR.mkdir(parents=True, exist_ok=True)
+    memos: list[dict[str, Any]] = []
+    try:
+        for item in sorted(_PROJECT_MEMO_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+            if item.is_file() and not item.name.startswith("."):
+                stat = item.stat()
+                memos.append({
+                    "filename": item.name,
+                    "size": stat.st_size,
+                    "last_modified": stat.st_mtime,
+                })
+    except OSError:
+        pass
+    return memos
+
+
+def create_project_memo(title: str, content: str) -> dict[str, Any]:
+    """Create a new project memo in _notes/_project_memo/."""
+    _PROJECT_MEMO_DIR.mkdir(parents=True, exist_ok=True)
+    safe_title = "".join(c for c in title if c.isalnum() or c in "-_ ").strip() or "untitled"
+    filename = f"{safe_title}.md"
+    filepath = _PROJECT_MEMO_DIR / filename
+    counter = 1
+    while filepath.exists():
+        filename = f"{safe_title}_{counter}.md"
+        filepath = _PROJECT_MEMO_DIR / filename
+        counter += 1
+    try:
+        filepath.write_text(content, encoding="utf-8")
+        return {"success": True, "filename": filename, "message": f"Created {filename}"}
+    except OSError as e:
+        return {"success": False, "message": f"Failed to create: {e}"}
+
+
+def read_project_memo(filename: str) -> dict[str, Any]:
+    """Read a project memo's content."""
+    filepath = (_PROJECT_MEMO_DIR / filename).resolve()
+    if not str(filepath).startswith(str(_PROJECT_MEMO_DIR.resolve())) or not filepath.is_file():
+        return {"success": False, "message": "File not found"}
+    try:
+        return {"success": True, "filename": filename, "content": filepath.read_text(encoding="utf-8")}
+    except OSError as e:
+        return {"success": False, "message": f"Failed to read: {e}"}
+
+
+def update_project_memo(filename: str, content: str) -> dict[str, Any]:
+    """Update a project memo's content."""
+    filepath = (_PROJECT_MEMO_DIR / filename).resolve()
+    if not str(filepath).startswith(str(_PROJECT_MEMO_DIR.resolve())) or not filepath.is_file():
+        return {"success": False, "message": "File not found"}
+    try:
+        filepath.write_text(content, encoding="utf-8")
+        return {"success": True, "filename": filename, "message": "Updated"}
+    except OSError as e:
+        return {"success": False, "message": f"Failed to update: {e}"}
+
+
+def delete_project_memo(filename: str) -> dict[str, Any]:
+    """Delete a project memo."""
+    filepath = (_PROJECT_MEMO_DIR / filename).resolve()
+    if not str(filepath).startswith(str(_PROJECT_MEMO_DIR.resolve())) or not filepath.is_file():
+        return {"success": False, "message": "File not found"}
     try:
         filepath.unlink()
         return {"success": True, "message": f"Deleted {filename}"}

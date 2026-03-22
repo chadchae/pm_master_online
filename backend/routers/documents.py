@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from services import document_service
+from services import document_service, log_service
 
 router = APIRouter(prefix="/api", tags=["documents"])
 
@@ -68,6 +68,7 @@ def save_project_doc(project_name: str, filename: str, body: SaveDocRequest):
     result = document_service.write_doc(project_name, filename, body.content)
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["message"])
+    log_service.auto_log(project_name, "update", f"Document saved: {filename}")
     return result
 
 
@@ -77,6 +78,7 @@ def delete_project_doc(project_name: str, filename: str):
     result = document_service.delete_doc(project_name, filename)
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["message"])
+    log_service.auto_log(project_name, "delete", f"Document deleted: {filename}")
     return result
 
 

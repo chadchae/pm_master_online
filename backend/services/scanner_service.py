@@ -1089,9 +1089,9 @@ def move_project(project_name: str, from_stage: str, to_stage: str) -> dict[str,
         # Step 3: Move the project
         shutil.move(str(from_path), str(to_path))
 
-        # Step 4: Clean up empty source directory if it still exists
-        if from_path.exists() and not any(from_path.iterdir()):
-            from_path.rmdir()
+        # Step 4: Force remove source if it still exists (shutil.move can leave residual on cross-device)
+        if from_path.exists():
+            shutil.rmtree(from_path, ignore_errors=True)
 
         return {
             "success": True,

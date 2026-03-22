@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from services import auth_service, scanner_service
-from services import todo_service, issue_service, subtask_service, schedule_service
+from services import todo_service, issue_service, subtask_service, schedule_service, log_service
 from routers.deps import refresh_meta
 
 router = APIRouter(prefix="/api", tags=["misc"])
@@ -277,6 +277,7 @@ def list_todos(project_name: str):
 def create_todo(project_name: str, body: TodoCreateRequest):
     """Create a new todo item."""
     todo = todo_service.create_todo(project_name, body.model_dump())
+    log_service.auto_log(project_name, "create", f"Todo created: {body.title}")
     refresh_meta(project_name)
     return todo
 
@@ -308,6 +309,8 @@ def move_todo(project_name: str, todo_id: str, body: TodoMoveRequest):
     todo = todo_service.move_todo(project_name, todo_id, body.column, body.order)
     if todo is None:
         raise HTTPException(status_code=404, detail="Todo not found")
+    if body.column == "done":
+        log_service.auto_log(project_name, "update", f"Todo completed: {todo.get('title', '')}")
     refresh_meta(project_name)
     return todo
 
@@ -369,6 +372,7 @@ def list_issues(project_name: str):
 def create_issue(project_name: str, body: IssueCreateRequest):
     """Create a new issue."""
     issue = issue_service.create_issue(project_name, body.model_dump())
+    log_service.auto_log(project_name, "create", f"Issue created: {body.title}")
     refresh_meta(project_name)
     return issue
 
@@ -412,6 +416,7 @@ def resolve_issue(project_name: str, issue_id: str):
     issue = issue_service.resolve_issue(project_name, issue_id)
     if issue is None:
         raise HTTPException(status_code=404, detail="Issue not found")
+    log_service.auto_log(project_name, "update", f"Issue resolved: {issue.get('title', '')}")
     refresh_meta(project_name)
     return issue
 
@@ -506,6 +511,8 @@ def toggle_subtask(project_name: str, subtask_id: str, body: SubtaskToggleReques
     subtask = subtask_service.toggle_subtask(project_name, subtask_id, body.status)
     if subtask is None:
         raise HTTPException(status_code=404, detail="Subtask not found or invalid status")
+    if body.status == "done":
+        log_service.auto_log(project_name, "update", f"Subtask completed: {subtask.get('title', '')}")
     refresh_meta(project_name)
     return subtask
 
@@ -573,6 +580,7 @@ def list_schedule(project_name: str):
 def create_schedule_task(project_name: str, body: ScheduleTaskCreateRequest):
     """Create a new schedule task."""
     result = schedule_service.create_task(project_name, body.model_dump())
+    log_service.auto_log(project_name, "create", f"Schedule task created: {body.title}")
     refresh_meta(project_name)
     return result
 
@@ -766,3 +774,28 @@ async def websocket_terminal(ws: WebSocket):
                 os.waitpid(child_pid, 0)
             except OSError:
                 pass
+
+
+# --- Project log endpoints ---
+
+class LogCreateRequest(BaseModel):
+    type: str = "note"
+    title: str
+    description: str = ""
+    tags: list[str] = []
+
+@router.get("/projects/{project_name}/logs")
+def list_project_logs(project_name: str):
+    return log_service.list_logs(project_name)
+
+@router.post("/projects/{project_name}/logs")
+def create_project_log(project_name: str, body: LogCreateRequest):
+    entry = log_service.create_log(project_name, body.model_dump())
+    return entry
+
+@router.delete("/projects/{project_name}/logs/{log_id}")
+def delete_project_log(project_name: str, log_id: str):
+    success = log_service.delete_log(project_name, log_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Log not found")
+    return {"success": True}

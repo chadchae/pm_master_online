@@ -51,6 +51,7 @@ import {
   ArrowUp,
   ArrowDown,
   FolderSymlink,
+  History,
 } from "lucide-react";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
@@ -134,8 +135,8 @@ export default function ProjectDetailPage() {
   const [docs, setDocs] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get("tab") as "documents" | "notes" | "instructions" | "todo" | "issues" | "schedule" | "settings" | "terminal") || "settings";
-  const [activeTab, setActiveTab] = useState<"documents" | "notes" | "instructions" | "todo" | "issues" | "schedule" | "settings" | "terminal">(initialTab);
+  const initialTab = (searchParams.get("tab") as "documents" | "notes" | "instructions" | "todo" | "issues" | "schedule" | "settings" | "terminal" | "logs") || "settings";
+  const [activeTab, setActiveTab] = useState<"documents" | "notes" | "instructions" | "todo" | "issues" | "schedule" | "settings" | "terminal" | "logs">(initialTab);
   const [terminalMode, setTerminalMode] = useState<"shell" | "claude" | null>(null);
   const [terminalSessionKey, setTerminalSessionKey] = useState(0);
   const [newInstruction, setNewInstruction] = useState("");
@@ -244,6 +245,22 @@ export default function ProjectDetailPage() {
   useEffect(() => { subtasksRef.current = subtasks; }, [subtasks]);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [promptDialog, setPromptDialog] = useState<{ title: string; message?: string; placeholder?: string; defaultValue?: string; onConfirm: (value: string) => void } | null>(null);
+
+  // Log state
+  interface LogEntry {
+    id: string;
+    type: string;
+    title: string;
+    description: string;
+    created_at: string;
+    tags: string[];
+  }
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [newLogTitle, setNewLogTitle] = useState("");
+  const [newLogDesc, setNewLogDesc] = useState("");
+  const [newLogType, setNewLogType] = useState("note");
+  const [newLogTags, setNewLogTags] = useState("");
+  const [showLogForm, setShowLogForm] = useState(false);
 
   // Todo state
   interface TodoItem {
@@ -776,6 +793,42 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const loadLogs = async () => {
+    try {
+      const res = await apiFetch<{ entries: LogEntry[] }>(`/api/projects/${encodeURIComponent(name)}/logs`);
+      setLogs(res.entries || []);
+    } catch {}
+  };
+
+  const createLog = async () => {
+    if (!newLogTitle.trim()) return;
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/logs`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: newLogType,
+          title: newLogTitle.trim(),
+          description: newLogDesc.trim(),
+          tags: newLogTags ? newLogTags.split(",").map(t => t.trim()).filter(Boolean) : [],
+        }),
+      });
+      setNewLogTitle(""); setNewLogDesc(""); setNewLogType("note"); setNewLogTags("");
+      setShowLogForm(false);
+      loadLogs();
+    } catch {
+      toast.error(t("toast.failedToCreate"));
+    }
+  };
+
+  const deleteLog = async (logId: string) => {
+    try {
+      await apiFetch(`/api/projects/${encodeURIComponent(name)}/logs/${logId}`, { method: "DELETE" });
+      loadLogs();
+    } catch {
+      toast.error(t("toast.failedToDelete"));
+    }
+  };
+
   const loadIssues = async () => {
     try {
       const res = await apiFetch<{ issues: IssueItem[] }>(
@@ -957,6 +1010,7 @@ export default function ProjectDetailPage() {
     if (activeTab === "todo") loadTodos();
     if (activeTab === "issues") loadIssues();
     if (activeTab === "schedule") loadSchedule();
+    if (activeTab === "logs") loadLogs();
   }, [activeTab]);
 
   // ResizeObserver for responsive Gantt chart
@@ -1631,7 +1685,7 @@ export default function ProjectDetailPage() {
       {/* Tabs */}
       <div className={`border-b border-neutral-200 dark:border-neutral-800 ${docFullscreen ? "hidden" : ""}`}>
         <nav className="flex gap-4">
-          {(["settings", "documents", "notes", "todo", "schedule", "issues", "instructions", "terminal"] as const).map((tab) => (
+          {(["settings", "documents", "notes", "todo", "schedule", "issues", "instructions", "terminal", "logs"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2131,6 +2185,138 @@ export default function ProjectDetailPage() {
             visible={activeTab === "terminal"}
             onClose={() => { setTerminalMode(null); }}
           />
+        </div>
+      )}
+
+      {activeTab === "logs" && (
+        <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-5">
+          {/* Header + Add button */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-neutral-900 dark:text-white flex items-center gap-2">
+              <History className="w-4 h-4 text-indigo-500" />
+              {t("project.logs")}
+              <span className="text-xs font-normal text-neutral-400">({logs.length})</span>
+            </h3>
+            <button
+              onClick={() => setShowLogForm(!showLogForm)}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              {showLogForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+              {showLogForm ? t("action.cancel") : "Add"}
+            </button>
+          </div>
+
+          {/* Add form */}
+          {showLogForm && (
+            <div className="mb-4 p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg space-y-3">
+              <div className="flex gap-2">
+                <select
+                  value={newLogType}
+                  onChange={(e) => setNewLogType(e.target.value)}
+                  className="px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="note">Note</option>
+                  <option value="create">Create</option>
+                  <option value="update">Update</option>
+                  <option value="delete">Delete</option>
+                  <option value="milestone">Milestone</option>
+                </select>
+                <input
+                  type="text"
+                  value={newLogTitle}
+                  onChange={(e) => setNewLogTitle(e.target.value)}
+                  placeholder="What happened?"
+                  className="flex-1 px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && newLogTitle.trim()) { e.preventDefault(); createLog(); } }}
+                />
+              </div>
+              <textarea
+                value={newLogDesc}
+                onChange={(e) => setNewLogDesc(e.target.value)}
+                rows={2}
+                placeholder="Details (optional)"
+                className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newLogTags}
+                  onChange={(e) => setNewLogTags(e.target.value)}
+                  placeholder="Tags (comma separated)"
+                  className="flex-1 px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <button
+                  onClick={createLog}
+                  disabled={!newLogTitle.trim()}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Timeline */}
+          {logs.length === 0 ? (
+            <div className="text-center py-12 text-neutral-400">
+              <History className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No log entries yet</p>
+            </div>
+          ) : (
+            <div className="relative border-l-2 border-indigo-200 dark:border-indigo-800 ml-3 space-y-4">
+              {logs.map((entry) => {
+                const typeColors: Record<string, string> = {
+                  create: "bg-green-500",
+                  update: "bg-blue-500",
+                  delete: "bg-red-500",
+                  milestone: "bg-amber-500",
+                  note: "bg-indigo-500",
+                };
+                const typeLabels: Record<string, string> = {
+                  create: "Created",
+                  update: "Updated",
+                  delete: "Deleted",
+                  milestone: "Milestone",
+                  note: "Note",
+                };
+                return (
+                  <div key={entry.id} className="relative pl-6 group">
+                    <div className={`absolute -left-[9px] top-2 w-4 h-4 rounded-full border-2 border-white dark:border-neutral-900 ${typeColors[entry.type] || typeColors.note}`} />
+                    <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-3 hover:shadow-sm transition-shadow">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white ${typeColors[entry.type] || typeColors.note}`}>
+                              {typeLabels[entry.type] || entry.type}
+                            </span>
+                            <span className="text-xs text-neutral-400">{entry.created_at}</span>
+                          </div>
+                          <p className="text-sm font-medium text-neutral-900 dark:text-white">{entry.title}</p>
+                          {entry.description && (
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{entry.description}</p>
+                          )}
+                          {entry.tags.length > 0 && (
+                            <div className="flex gap-1 mt-1.5">
+                              {entry.tags.map((tag) => (
+                                <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => deleteLog(entry.id)}
+                          className="p-1 text-neutral-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all rounded"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

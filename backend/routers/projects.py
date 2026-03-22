@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from services import scanner_service, project_meta_service
+from services import scanner_service, project_meta_service, log_service
 from services import todo_service, issue_service, subtask_service, schedule_service
 from routers.deps import refresh_meta
 
@@ -134,6 +134,7 @@ def create_project(body: CreateProjectRequest):
     )
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["message"])
+    log_service.auto_log(body.folder_name, "create", f"Project created: {body.label or body.folder_name}")
     return result
 
 
@@ -169,6 +170,7 @@ def move_project(body: MoveProjectRequest):
         )
         result["note_created"] = note_result.get("filename")
 
+    log_service.auto_log(body.project_name, "milestone", f"Stage moved: {body.from_stage} → {body.to_stage}")
     refresh_meta(body.project_name)
     return result
 

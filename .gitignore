@@ -56,6 +56,7 @@ backend/data/todos/
 backend/data/issues/
 backend/data/schedules/
 backend/data/subtasks/
+backend/data/logs/
 
 # Auto-generated project meta snapshots
 docs/_settings/

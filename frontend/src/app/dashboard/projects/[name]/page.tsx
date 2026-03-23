@@ -53,10 +53,13 @@ import {
   FolderSymlink,
   History,
   StickyNote,
+  BookOpen,
+  Hash,
 } from "lucide-react";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
 import { DocumentViewer } from "@/components/project/DocumentViewer";
+import { MemoEditor } from "@/components/project/MemoEditor";
 import { TodoBoard } from "@/components/project/TodoBoard";
 import { MetaTags } from "@/components/MetaTags";
 import { ProgressBar } from "@/components/ProgressBar";
@@ -174,7 +177,9 @@ export default function ProjectDetailPage() {
   const [docBlobUrl, setDocBlobUrl] = useState<string | null>(null);
   const [docHtml, setDocHtml] = useState<string | null>(null);
   const [docFullscreen, setDocFullscreen] = useState(false);
+  const [showLineNumbers, setShowLineNumbers] = useState(false);
   const [memoOpen, setMemoOpen] = useState(false);
+  const [memoLineNumbers, setMemoLineNumbers] = useState(false);
   const [memoContent, setMemoContent] = useState("");
   const [memoSaving, setMemoSaving] = useState(false);
   const memoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,6 +201,19 @@ export default function ProjectDetailPage() {
       loadDocs(docPath);
     }
     setMemoOpen(true);
+  };
+  const viewMemo = async () => {
+    if (!selectedDoc) return;
+    const memoName = getMemoFilename(selectedDoc);
+    const memoPath = docPath ? `${docPath}/${memoName}` : memoName;
+    const apiPath = `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(memoPath))}`;
+    try {
+      const data = await apiFetch<{ content: string }>(apiPath);
+      setMemoContent(data.content);
+      setMemoOpen(true);
+    } catch {
+      toast(t("memo.notFound") || "이전에 생성한 메모가 없습니다.", { icon: "📝" });
+    }
   };
   const saveMemo = async (content: string) => {
     if (!selectedDoc) return;
@@ -1598,12 +1616,13 @@ export default function ProjectDetailPage() {
                     {project.metadata?.label || project.name}
                     <Edit3 className="inline-block w-3.5 h-3.5 ml-2 opacity-0 group-hover:opacity-40 transition-opacity" />
                   </h1>
-                  <span className="text-xs text-neutral-400 font-mono ml-2 self-center">{project.name}</span>
                 </>
               )}
             </div>
+            {/* Local path */}
+            <p className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono pl-9 mt-0.5 truncate">{project.path}</p>
             {/* Description - editable */}
-            <div className="mt-1.5 group pl-9">
+            <div className="mt-1 group pl-9">
               {editingDesc ? (
                 <div className="flex items-start gap-2">
                   <textarea
@@ -2122,12 +2141,33 @@ export default function ProjectDetailPage() {
                             <Printer className="w-4 h-4" />
                           </button>
                         )}
+                        {(() => {
+                          const textExts = ["md","rmd","qmd","txt","py","js","ts","tsx","jsx","json","yaml","yml","toml","ini","cfg","conf","sh","bash","zsh","html","htm","css","scss","less","xml","svg","sql","r","rmd","qmd","java","c","cpp","h","hpp","go","rs","rb","php","pl","lua","vim","dockerfile","makefile","cmake","env","gitignore","editorconfig","hwp","hwpx"];
+                          const ext = selectedDoc?.split(".").pop()?.toLowerCase() || "";
+                          const isText = textExts.includes(ext) || (!docBlobUrl && !docHtml);
+                          return isText ? (
+                            <button
+                              onClick={() => setShowLineNumbers(!showLineNumbers)}
+                              className={`p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 ${showLineNumbers ? "text-indigo-500" : "text-neutral-500"}`}
+                              title={showLineNumbers ? "Hide Line Numbers" : "Show Line Numbers"}
+                            >
+                              <Hash className="w-4 h-4" />
+                            </button>
+                          ) : null;
+                        })()}
                         <button
                           onClick={() => { if (memoOpen) { flushMemo(); setMemoOpen(false); } else { openMemo(); } }}
                           className={`p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 ${memoOpen ? "text-amber-500" : "text-neutral-500"}`}
                           title={memoOpen ? "Close Memo" : "Memo"}
                         >
                           <StickyNote className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { if (memoOpen) { flushMemo(); setMemoOpen(false); } else { viewMemo(); } }}
+                          className={`p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 ${memoOpen ? "text-amber-500" : "text-neutral-500"}`}
+                          title={memoOpen ? "Close Memo" : "View Memo"}
+                        >
+                          <BookOpen className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setDocFullscreen(!docFullscreen)}
@@ -2159,6 +2199,7 @@ export default function ProjectDetailPage() {
                         docContent={docContent}
                         docBlobUrl={docBlobUrl}
                         docHtml={docHtml}
+                        showLineNumbers={showLineNumbers}
                       />
                     )}
                   </div>
@@ -2170,6 +2211,13 @@ export default function ProjectDetailPage() {
                         </span>
                         <div className="flex items-center gap-0.5 flex-shrink-0">
                           {memoSaving && <span className="text-[10px] text-neutral-400 mr-1">saving...</span>}
+                          <button
+                            onClick={() => setMemoLineNumbers(!memoLineNumbers)}
+                            className={`p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 ${memoLineNumbers ? "text-indigo-500" : "text-neutral-400"}`}
+                            title={memoLineNumbers ? "Hide Line Numbers" : "Show Line Numbers"}
+                          >
+                            <Hash className="w-3 h-3" />
+                          </button>
                           <button
                             onClick={() => {
                               setConfirmDialog({
@@ -2194,10 +2242,10 @@ export default function ProjectDetailPage() {
                           </button>
                         </div>
                       </div>
-                      <textarea
+                      <MemoEditor
                         value={memoContent}
-                        onChange={(e) => onMemoChange(e.target.value)}
-                        className="flex-1 w-full p-3 text-sm bg-transparent resize-none focus:outline-none text-neutral-800 dark:text-neutral-200 placeholder-neutral-400"
+                        onChange={onMemoChange}
+                        showLineNumbers={memoLineNumbers}
                         placeholder="Write memo here..."
                       />
                     </div>

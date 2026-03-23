@@ -10,14 +10,36 @@ import rehypeKatex from "rehype-katex";
 
 const MarkdownPreview = lazy(() => import("@uiw/react-markdown-preview"));
 
+function LineNumberedContent({ content, mono = true }: { content: string; mono?: boolean }) {
+  const lines = content.split("\n");
+  const gutterWidth = String(lines.length).length;
+  return (
+    <div className="flex h-full overflow-auto">
+      <div className="flex-shrink-0 select-none text-right pr-3 border-r border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 sticky left-0">
+        {lines.map((_, i) => (
+          <div key={i} className="text-xs leading-5 text-neutral-400 px-2" style={{ minWidth: `${gutterWidth + 1.5}ch` }}>
+            {i + 1}
+          </div>
+        ))}
+      </div>
+      <pre className={`flex-1 pl-3 text-sm ${mono ? "font-mono" : "font-sans"} text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words`}>
+        {lines.map((line, i) => (
+          <div key={i} className="leading-5">{line || "\u00A0"}</div>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
 interface DocumentViewerProps {
   selectedDoc: string;
   docContent: string;
   docBlobUrl: string | null;
   docHtml: string | null;
+  showLineNumbers?: boolean;
 }
 
-export function DocumentViewer({ selectedDoc, docContent, docBlobUrl, docHtml }: DocumentViewerProps) {
+export function DocumentViewer({ selectedDoc, docContent, docBlobUrl, docHtml, showLineNumbers }: DocumentViewerProps) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -51,8 +73,34 @@ export function DocumentViewer({ selectedDoc, docContent, docBlobUrl, docHtml }:
     return <CsvViewer content={docContent} />;
   }
 
+  if (selectedDoc?.endsWith(".hwp") || selectedDoc?.endsWith(".hwpx")) {
+    return (
+      <div className="p-6 h-full overflow-auto">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-neutral-200 dark:border-neutral-700">
+          <span className="text-xs px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium">
+            HWP Preview
+          </span>
+          <span className="text-xs text-neutral-400">Text extracted from {selectedDoc}</span>
+        </div>
+        {showLineNumbers ? (
+          <LineNumberedContent content={docContent} mono={false} />
+        ) : (
+          <pre className="text-sm font-sans text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words leading-relaxed">
+            {docContent}
+          </pre>
+        )}
+      </div>
+    );
+  }
+
   if (selectedDoc?.endsWith(".md") || selectedDoc?.endsWith(".rmd") || selectedDoc?.endsWith(".qmd")) {
-    // Escape unescaped % inside \text{} to prevent KaTeX parse errors
+    if (showLineNumbers) {
+      return (
+        <div className="p-4 h-full overflow-auto">
+          <LineNumberedContent content={docContent} />
+        </div>
+      );
+    }
     const fixedContent = docContent.replace(/\\text\{([^}]*)}/g, (match, inner) =>
       "\\text{" + inner.replace(/(?<!\\)%/g, "\\%") + "}"
     );
@@ -67,6 +115,14 @@ export function DocumentViewer({ selectedDoc, docContent, docBlobUrl, docHtml }:
             rehypePlugins={[[rehypeKatex, { strict: "ignore", throwOnError: false, output: "html" }]]}
           />
         </Suspense>
+      </div>
+    );
+  }
+
+  if (showLineNumbers) {
+    return (
+      <div className="p-4 h-full overflow-auto">
+        <LineNumberedContent content={docContent} />
       </div>
     );
   }

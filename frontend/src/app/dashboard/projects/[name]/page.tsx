@@ -52,6 +52,7 @@ import {
   ArrowDown,
   FolderSymlink,
   History,
+  StickyNote,
 } from "lucide-react";
 
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
@@ -173,6 +174,52 @@ export default function ProjectDetailPage() {
   const [docBlobUrl, setDocBlobUrl] = useState<string | null>(null);
   const [docHtml, setDocHtml] = useState<string | null>(null);
   const [docFullscreen, setDocFullscreen] = useState(false);
+  const [memoOpen, setMemoOpen] = useState(false);
+  const [memoContent, setMemoContent] = useState("");
+  const [memoSaving, setMemoSaving] = useState(false);
+  const memoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const getMemoFilename = (fn: string) => {
+    const dot = fn.lastIndexOf(".");
+    return dot > 0 ? `${fn.slice(0, dot)}_메모.md` : `${fn}_메모.md`;
+  };
+  const openMemo = async () => {
+    if (!selectedDoc) return;
+    const memoName = getMemoFilename(selectedDoc);
+    const memoPath = docPath ? `${docPath}/${memoName}` : memoName;
+    const apiPath = `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(memoPath))}`;
+    try {
+      const data = await apiFetch<{ content: string }>(apiPath);
+      setMemoContent(data.content);
+    } catch {
+      await apiFetch(apiPath, { method: "PUT", body: JSON.stringify({ content: "" }) });
+      setMemoContent("");
+      loadDocs(docPath);
+    }
+    setMemoOpen(true);
+  };
+  const saveMemo = async (content: string) => {
+    if (!selectedDoc) return;
+    const memoName = getMemoFilename(selectedDoc);
+    const memoPath = docPath ? `${docPath}/${memoName}` : memoName;
+    const apiPath = `/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(memoPath))}`;
+    setMemoSaving(true);
+    try {
+      await apiFetch(apiPath, { method: "PUT", body: JSON.stringify({ content }) });
+    } catch { /* silent */ }
+    setMemoSaving(false);
+  };
+  const onMemoChange = (v: string) => {
+    setMemoContent(v);
+    if (memoTimerRef.current) clearTimeout(memoTimerRef.current);
+    memoTimerRef.current = setTimeout(() => saveMemo(v), 1000);
+  };
+  const flushMemo = () => {
+    if (memoTimerRef.current) {
+      clearTimeout(memoTimerRef.current);
+      memoTimerRef.current = null;
+      saveMemo(memoContent);
+    }
+  };
   useEffect(() => {
     if (!docFullscreen) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setDocFullscreen(false); };
@@ -198,6 +245,56 @@ export default function ProjectDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
   const [isEditing, setIsEditing] = useState(false);
+  // Keyboard navigation & delete for files in document/notes viewer
+  useEffect(() => {
+    if (!selectedDoc || isEditing || docSelectMode) return;
+    if (activeTab !== "documents" && activeTab !== "notes") return;
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target as HTMLElement)?.isContentEditable) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        setConfirmDialog({
+          message: `Delete "${selectedDoc}"?`,
+          onConfirm: () => {
+            setConfirmDialog(null);
+            setDeletingDoc(true);
+            const fp = docPath ? `${docPath}/${selectedDoc}` : selectedDoc;
+            apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(fp))}`, { method: "DELETE" })
+              .then(() => { setDocs((p) => p.filter((d) => d.filename !== selectedDoc)); setSelectedDoc(null); setDocContent(""); setDocBlobUrl(null); setDocHtml(null); setMemoOpen(false); toast.success("Deleted"); })
+              .catch((err) => toast.error(err instanceof Error ? err.message : "Failed"))
+              .finally(() => setDeletingDoc(false));
+          },
+        });
+        return;
+      }
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      e.preventDefault();
+      const getExt = (n: string) => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(i + 1).toLowerCase() : ""; };
+      const sorted = [...docs].sort((a, b) => {
+        const aF = (a as any).is_folder ? 1 : 0;
+        const bF = (b as any).is_folder ? 1 : 0;
+        if (aF !== bF) return bF - aF;
+        const dir = docSortDir === "asc" ? 1 : -1;
+        if (docSortKey === "type") {
+          const aE = aF ? "" : getExt(a.filename);
+          const bE = bF ? "" : getExt(b.filename);
+          const cmp = aE.localeCompare(bE);
+          return cmp !== 0 ? cmp * dir : a.filename.localeCompare(b.filename) * dir;
+        }
+        return a.filename.localeCompare(b.filename) * dir;
+      });
+      const fileOnly = sorted.filter((d) => !(d as any).is_folder);
+      const idx = fileOnly.findIndex((d) => d.filename === selectedDoc);
+      if (idx < 0) return;
+      const next = e.key === "ArrowUp" ? idx - 1 : idx + 1;
+      if (next >= 0 && next < fileOnly.length) {
+        loadDoc(fileOnly[next].filename);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedDoc, docs, docSortDir, docSortKey, isEditing, docSelectMode, activeTab]);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
@@ -1070,6 +1167,8 @@ export default function ProjectDetailPage() {
     const apiFilePath = getApiDocPath(filePath);
     setSelectedDoc(filename);
     setIsEditing(false);
+    flushMemo();
+    setMemoOpen(false);
     setShowNewDoc(false);
     setShowNewDocFolder(false);
     // Clean up previous blob URL
@@ -2024,6 +2123,13 @@ export default function ProjectDetailPage() {
                           </button>
                         )}
                         <button
+                          onClick={() => { if (memoOpen) { flushMemo(); setMemoOpen(false); } else { openMemo(); } }}
+                          className={`p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 ${memoOpen ? "text-amber-500" : "text-neutral-500"}`}
+                          title={memoOpen ? "Close Memo" : "Memo"}
+                        >
+                          <StickyNote className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => setDocFullscreen(!docFullscreen)}
                           className="p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500"
                           title={docFullscreen ? "Exit Fullscreen" : "Fullscreen"}
@@ -2041,18 +2147,60 @@ export default function ProjectDetailPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto" data-color-mode={colorMode}>
-                  {isEditing ? (
-                    <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
-                      <MDEditor value={editContent} onChange={(v) => setEditContent(v || "")} height="100%" preview="live" />
-                    </Suspense>
-                  ) : (
-                    <DocumentViewer
-                      selectedDoc={selectedDoc!}
-                      docContent={docContent}
-                      docBlobUrl={docBlobUrl}
-                      docHtml={docHtml}
-                    />
+                <div className="flex-1 flex overflow-hidden">
+                  <div className={`${memoOpen ? "w-3/4" : "w-full"} overflow-auto`} data-color-mode={colorMode}>
+                    {isEditing ? (
+                      <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+                        <MDEditor value={editContent} onChange={(v) => setEditContent(v || "")} height="100%" preview="live" />
+                      </Suspense>
+                    ) : (
+                      <DocumentViewer
+                        selectedDoc={selectedDoc!}
+                        docContent={docContent}
+                        docBlobUrl={docBlobUrl}
+                        docHtml={docHtml}
+                      />
+                    )}
+                  </div>
+                  {memoOpen && selectedDoc && (
+                    <div className="w-1/4 border-l border-neutral-200 dark:border-neutral-700 flex flex-col bg-amber-50/30 dark:bg-amber-950/10">
+                      <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700">
+                        <span className="text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1 truncate">
+                          <StickyNote className="w-3 h-3 flex-shrink-0" /> {getMemoFilename(selectedDoc)}
+                        </span>
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          {memoSaving && <span className="text-[10px] text-neutral-400 mr-1">saving...</span>}
+                          <button
+                            onClick={() => {
+                              setConfirmDialog({
+                                message: `Delete memo "${getMemoFilename(selectedDoc)}"?`,
+                                onConfirm: () => {
+                                  setConfirmDialog(null);
+                                  const memoName = getMemoFilename(selectedDoc);
+                                  const memoPath = docPath ? `${docPath}/${memoName}` : memoName;
+                                  apiFetch(`/api/projects/${encodeURIComponent(name)}/docs/${encodeURIComponent(getApiDocPath(memoPath))}`, { method: "DELETE" })
+                                    .then(() => { setMemoOpen(false); setMemoContent(""); loadDocs(docPath); toast.success("Memo deleted"); })
+                                    .catch(() => toast.error("Failed to delete memo"));
+                                },
+                              });
+                            }}
+                            className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500"
+                            title="Delete memo"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => { flushMemo(); setMemoOpen(false); }} className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400" title="Close memo">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        value={memoContent}
+                        onChange={(e) => onMemoChange(e.target.value)}
+                        className="flex-1 w-full p-3 text-sm bg-transparent resize-none focus:outline-none text-neutral-800 dark:text-neutral-200 placeholder-neutral-400"
+                        placeholder="Write memo here..."
+                      />
+                    </div>
                   )}
                 </div>
               </>

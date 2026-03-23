@@ -78,6 +78,7 @@ export interface ProjectMetadata {
   협업?: string;     // personal / collaboration
   주도?: string;     // lead / member
   오너?: string;     // project owner name
+  연관프로젝트?: string;  // related projects
   목표종료일?: string;  // target end date
   실제종료일?: string;  // actual end date
   subtasks_total?: string;

@@ -23,6 +23,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  StickyNote,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTheme } from "next-themes";
@@ -93,6 +94,52 @@ export default function CommonFolderPage() {
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [memoOpen, setMemoOpen] = useState(false);
+  const [memoContent, setMemoContent] = useState("");
+  const [memoSaving, setMemoSaving] = useState(false);
+  const memoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const getMemoFilename = (fn: string) => {
+    const dot = fn.lastIndexOf(".");
+    return dot > 0 ? `${fn.slice(0, dot)}_메모.md` : `${fn}_메모.md`;
+  };
+  const openMemo = async () => {
+    if (!selectedFile) return;
+    const memoName = getMemoFilename(selectedFile);
+    const memoPath = currentPath ? `${currentPath}/${memoName}` : memoName;
+    const apiPath = `/api/common/${type}/${encodeURIComponent(memoPath)}`;
+    try {
+      const data = await apiFetch<{ content: string }>(apiPath);
+      setMemoContent(data.content);
+    } catch {
+      await apiFetch(apiPath, { method: "PUT", body: JSON.stringify({ content: "" }) });
+      setMemoContent("");
+      loadFiles(currentPath);
+    }
+    setMemoOpen(true);
+  };
+  const saveMemo = async (content: string) => {
+    if (!selectedFile) return;
+    const memoName = getMemoFilename(selectedFile);
+    const memoPath = currentPath ? `${currentPath}/${memoName}` : memoName;
+    const apiPath = `/api/common/${type}/${encodeURIComponent(memoPath)}`;
+    setMemoSaving(true);
+    try {
+      await apiFetch(apiPath, { method: "PUT", body: JSON.stringify({ content }) });
+    } catch { /* silent */ }
+    setMemoSaving(false);
+  };
+  const onMemoChange = (v: string) => {
+    setMemoContent(v);
+    if (memoTimerRef.current) clearTimeout(memoTimerRef.current);
+    memoTimerRef.current = setTimeout(() => saveMemo(v), 1000);
+  };
+  const flushMemo = () => {
+    if (memoTimerRef.current) {
+      clearTimeout(memoTimerRef.current);
+      memoTimerRef.current = null;
+      saveMemo(memoContent);
+    }
+  };
 
   // Multi-select
   const [selectMode, setSelectMode] = useState(false);
@@ -153,6 +200,8 @@ export default function CommonFolderPage() {
     const filePath = currentPath ? `${currentPath}/${filename}` : filename;
     setSelectedFile(filename);
     setIsEditing(false);
+    flushMemo();
+    setMemoOpen(false);
     setShowNewFile(false);
     setShowNewFolder(false);
     apiFetch<{ content: string }>(
@@ -279,6 +328,56 @@ export default function CommonFolderPage() {
     if (fileSortKey === key) setFileSortDir(fileSortDir === "asc" ? "desc" : "asc");
     else { setFileSortKey(key); setFileSortDir("asc"); }
   };
+
+  // Keyboard navigation & delete for files
+  useEffect(() => {
+    if (!selectedFile || isEditing || selectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target as HTMLElement)?.isContentEditable) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        setConfirmDialog({
+          message: `Delete "${selectedFile}"?`,
+          onConfirm: () => {
+            setConfirmDialog(null);
+            const fp = currentPath ? `${currentPath}/${selectedFile}` : selectedFile;
+            apiFetch(`/api/common/${type}/${encodeURIComponent(fp)}`, { method: "DELETE" })
+              .then(() => { setFiles((prev) => prev.filter((f) => f.filename !== selectedFile)); setSelectedFile(null); setContent(""); setMemoOpen(false); toast.success(t("toast.deleted")); })
+              .catch(() => toast.error(t("toast.failedToDelete")));
+          },
+        });
+        return;
+      }
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      e.preventDefault();
+      const getExt = (n: string) => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(i + 1).toLowerCase() : ""; };
+      const sorted = [...files].filter((f) =>
+        f.filename.toLowerCase().includes(search.toLowerCase())
+      ).sort((a, b) => {
+        const aF = (a as any).is_directory ? 1 : 0;
+        const bF = (b as any).is_directory ? 1 : 0;
+        if (aF !== bF) return bF - aF;
+        const dir = fileSortDir === "asc" ? 1 : -1;
+        if (fileSortKey === "type") {
+          const aE = aF ? "" : getExt(a.filename);
+          const bE = bF ? "" : getExt(b.filename);
+          const cmp = aE.localeCompare(bE);
+          return cmp !== 0 ? cmp * dir : a.filename.localeCompare(b.filename) * dir;
+        }
+        return a.filename.localeCompare(b.filename) * dir;
+      });
+      const fileOnly = sorted.filter((f) => !(f as any).is_directory);
+      const idx = fileOnly.findIndex((f) => f.filename === selectedFile);
+      if (idx < 0) return;
+      const next = e.key === "ArrowUp" ? idx - 1 : idx + 1;
+      if (next >= 0 && next < fileOnly.length) {
+        loadFile(fileOnly[next].filename);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedFile, files, search, fileSortDir, fileSortKey, isEditing, selectMode]);
 
   if (!isValid) {
     return (
@@ -649,6 +748,13 @@ export default function CommonFolderPage() {
                       <Printer className="w-4 h-4" />
                     </button>
                     <button
+                      onClick={() => { if (memoOpen) { flushMemo(); setMemoOpen(false); } else { openMemo(); } }}
+                      className={`p-1.5 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors ${memoOpen ? "text-amber-500" : "text-neutral-500"}`}
+                      title={memoOpen ? "Close Memo" : "Memo"}
+                    >
+                      <StickyNote className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => {
                         setConfirmDialog({
                           message: `Delete "${selectedFile}"?`,
@@ -674,37 +780,79 @@ export default function CommonFolderPage() {
                 )}
               </div>
             </div>
-            <div className="flex-1 overflow-auto" data-color-mode={colorMode}>
-              {isEditing ? (
-                <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
-                  <MDEditor
-                    value={editContent}
-                    onChange={(v) => setEditContent(v || "")}
-                    height="100%"
-                    preview="live"
+            <div className="flex-1 flex overflow-hidden">
+              <div className={`${memoOpen ? "w-3/4" : "w-full"} overflow-auto`} data-color-mode={colorMode}>
+                {isEditing ? (
+                  <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+                    <MDEditor
+                      value={editContent}
+                      onChange={(v) => setEditContent(v || "")}
+                      height="100%"
+                      preview="live"
+                    />
+                  </Suspense>
+                ) : (selectedFile?.endsWith(".html") || selectedFile?.endsWith(".htm")) ? (
+                  <iframe
+                    srcDoc={content}
+                    className="w-full h-full border-0"
+                    title={selectedFile || ""}
+                    sandbox="allow-scripts allow-same-origin"
                   />
-                </Suspense>
-              ) : (selectedFile?.endsWith(".html") || selectedFile?.endsWith(".htm")) ? (
-                <iframe
-                  srcDoc={content}
-                  className="w-full h-full border-0"
-                  title={selectedFile || ""}
-                  sandbox="allow-scripts allow-same-origin"
-                />
-              ) : (selectedFile?.endsWith(".md") || selectedFile?.endsWith(".rmd") || selectedFile?.endsWith(".qmd")) ? (
-                <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
-                  <MarkdownPreview
-                    source={content.replace(/\\text\{([^}]*)}/g, (m: string, inner: string) => "\\text{" + inner.replace(/(?<!\\)%/g, "\\%") + "}")}
-                    style={{ padding: "1rem", backgroundColor: "transparent" }}
-                    components={mdComponents}
-                    remarkPlugins={[remarkMath]}
-                    rehypePlugins={[[rehypeKatex, { strict: "ignore", throwOnError: false, output: "html" }]]}
+                ) : (selectedFile?.endsWith(".md") || selectedFile?.endsWith(".rmd") || selectedFile?.endsWith(".qmd")) ? (
+                  <Suspense fallback={<div className="p-4"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+                    <MarkdownPreview
+                      source={content.replace(/\\text\{([^}]*)}/g, (m: string, inner: string) => "\\text{" + inner.replace(/(?<!\\)%/g, "\\%") + "}")}
+                      style={{ padding: "1rem", backgroundColor: "transparent" }}
+                      components={mdComponents}
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[[rehypeKatex, { strict: "ignore", throwOnError: false, output: "html" }]]}
+                    />
+                  </Suspense>
+                ) : (
+                  <pre className="p-4 text-sm font-mono text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words">
+                    {content}
+                  </pre>
+                )}
+              </div>
+              {memoOpen && selectedFile && (
+                <div className="w-1/4 border-l border-neutral-200 dark:border-neutral-700 flex flex-col bg-amber-50/30 dark:bg-amber-950/10">
+                  <div className="flex items-center justify-between px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700">
+                    <span className="text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1 truncate">
+                      <StickyNote className="w-3 h-3 flex-shrink-0" /> {getMemoFilename(selectedFile)}
+                    </span>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      {memoSaving && <span className="text-[10px] text-neutral-400 mr-1">saving...</span>}
+                      <button
+                        onClick={() => {
+                          setConfirmDialog({
+                            message: `Delete memo "${getMemoFilename(selectedFile)}"?`,
+                            onConfirm: () => {
+                              setConfirmDialog(null);
+                              const memoName = getMemoFilename(selectedFile);
+                              const memoPath = currentPath ? `${currentPath}/${memoName}` : memoName;
+                              apiFetch(`/api/common/${type}/${encodeURIComponent(memoPath)}`, { method: "DELETE" })
+                                .then(() => { setMemoOpen(false); setMemoContent(""); loadFiles(currentPath); toast.success("Memo deleted"); })
+                                .catch(() => toast.error("Failed to delete memo"));
+                            },
+                          });
+                        }}
+                        className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-neutral-400 hover:text-red-500"
+                        title="Delete memo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                      <button onClick={() => { flushMemo(); setMemoOpen(false); }} className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400" title="Close memo">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={memoContent}
+                    onChange={(e) => onMemoChange(e.target.value)}
+                    className="flex-1 w-full p-3 text-sm bg-transparent resize-none focus:outline-none text-neutral-800 dark:text-neutral-200 placeholder-neutral-400"
+                    placeholder="Write memo here..."
                   />
-                </Suspense>
-              ) : (
-                <pre className="p-4 text-sm font-mono text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words">
-                  {content}
-                </pre>
+                </div>
               )}
             </div>
           </>

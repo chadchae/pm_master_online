@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.1.0] - 2026-03-24
+
+### Added
+- Plans page (full feature sync from pm-master-local v2.2.0)
+  - Card and rail (kanban) views with drag-and-drop between stage columns
+  - Action icons on hover (view, edit, delete, JSON export) for cards and rows
+  - Mandalart (LayoutGrid) and diagram (Map) indicator icons — active/inactive state
+  - Related person navigation — click person in view tab → `/dashboard/people?highlight={id}`
+  - Save button at bottom of settings tab with "저장 완료" message, auto-navigates to view tab after 2.5s
+- People page: highlight and scroll-to on `?highlight={id}` query param (3s ring animation)
+- Sidebar: Plans menu item (Map icon) and Portfolio menu item (Briefcase icon)
+- Portfolio page (`/dashboard/portfolio`) — placeholder for future development
+- Backend: `/api/plans` router added (plan CRUD + node/edge support)
+- i18n: `sidebar.plans`, `sidebar.portfolio` (ko/en)
+
+### Fixed
+- Korean IME 자모분리 in description textarea and Enter key handlers (isComposing guard)
+- PlanEdge model: backend fields aligned with frontend (`fromId`/`toId`/`fromPort`/`toPort`/`label`)
+
+### Changed
+- Version bump: 1.0.0 → 2.1.0
+
+---
+
 ## [1.0.0] - 2026-03-20
 
 ### Milestone

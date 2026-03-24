@@ -14,6 +14,7 @@ import {
   Clock,
   Server,
   Users,
+  Briefcase,
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
@@ -24,6 +25,8 @@ import {
   FileText,
   CheckSquare,
   BarChart3,
+  CalendarDays,
+  Map,
 } from "lucide-react";
 import { PasswordChangeModal } from "./PasswordChangeModal";
 import { QuickNotePanel } from "./QuickNotePanel";
@@ -43,6 +46,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { labelKey: "sidebar.dashboard", href: "/dashboard", icon: LayoutDashboard },
   { labelKey: "sidebar.ideas", href: "/dashboard/ideas", icon: Lightbulb },
   { labelKey: "sidebar.projects", href: "/dashboard/projects", icon: FolderKanban },
+  { labelKey: "sidebar.plans", href: "/dashboard/plans", icon: Map },
   { labelKey: "sidebar.todos", href: "/dashboard/todos", icon: ClipboardList },
   { labelKey: "sidebar.status", href: "/dashboard/status", icon: BarChart3 },
   { labelKey: "sidebar.notes", href: "/dashboard/notes", icon: StickyNote },
@@ -53,6 +57,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { labelKey: "sidebar.timeline", href: "/dashboard/timeline", icon: Clock },
   { labelKey: "sidebar.servers", href: "/dashboard/servers", icon: Server },
   { labelKey: "sidebar.people", href: "/dashboard/people", icon: Users },
+  { labelKey: "sidebar.portfolio", href: "/dashboard/portfolio", icon: Briefcase },
   { labelKey: "sidebar.trash", href: "/dashboard/trash", icon: Trash },
 ];
 

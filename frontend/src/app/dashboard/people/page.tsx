@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Users,
   Search,
@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   List,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import toast from "react-hot-toast";
 import { useLocale } from "@/lib/i18n";
@@ -31,6 +32,10 @@ import {
 // Main page component
 export default function PeoplePage() {
   const { t } = useLocale();
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlight");
+  const [highlightedId, setHighlightedId] = useState<string | null>(highlightId);
+  const highlightRef = useRef<HTMLDivElement | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

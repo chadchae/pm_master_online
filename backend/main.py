@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from services import auth_service
-from routers import auth, projects, documents, common, servers, people, misc
+from routers import auth, projects, documents, common, servers, people, misc, plans
 
 app = FastAPI(title="Project Manager", version="1.1.0")
 
@@ -76,6 +76,7 @@ app.include_router(common.router)
 app.include_router(servers.router)
 app.include_router(people.router)
 app.include_router(misc.router)
+app.include_router(plans.router)
 
 
 # --- WebSocket (registered directly on app) ---

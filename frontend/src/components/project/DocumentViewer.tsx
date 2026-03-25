@@ -2,7 +2,7 @@
 
 import React, { Suspense, lazy, useState, useEffect } from "react";
 import { useTheme } from "next-themes";
-import { Loader2 } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { CsvViewer } from "./CsvViewer";
 import { mdComponents } from "./MarkdownRenderers";
 import remarkMath from "remark-math";
@@ -57,7 +57,22 @@ export function DocumentViewer({ selectedDoc, docContent, docBlobUrl, docHtml, s
     if (imageExts.includes(ext)) {
       return <div className="flex items-center justify-center h-full p-4 overflow-auto"><img src={docBlobUrl} alt={selectedDoc || ""} className="max-w-full max-h-full object-contain" /></div>;
     }
-    return <iframe src={docBlobUrl} className="w-full h-full border-0" title={selectedDoc || ""} />;
+    const isHtml = ["html", "htm"].includes(ext);
+    return (
+      <div className="relative w-full h-full">
+        <iframe src={docBlobUrl} className="w-full h-full border-0" title={selectedDoc || ""} />
+        {isHtml && (
+          <button
+            onClick={() => window.open(docBlobUrl, "_blank")}
+            title="Open in browser"
+            className="absolute top-2 right-2 flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg bg-neutral-800/80 hover:bg-neutral-700/90 text-neutral-200 backdrop-blur-sm shadow transition-colors"
+          >
+            <ExternalLink size={12} />
+            Open in browser
+          </button>
+        )}
+      </div>
+    );
   }
 
   if (docHtml) {

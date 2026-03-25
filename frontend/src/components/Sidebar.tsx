@@ -96,7 +96,7 @@ export function Sidebar() {
           </div>
           {!collapsed && (
             <span className="text-sm font-semibold text-neutral-900 dark:text-white truncate">
-              PM Master Online
+              PM Master Online <span className="text-[10px] font-normal text-neutral-400">v2.1.0</span>
             </span>
           )}
         </div>
